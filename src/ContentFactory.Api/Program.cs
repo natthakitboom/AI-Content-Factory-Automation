@@ -3,6 +3,7 @@ using ContentFactory.Api.Endpoints;
 using ContentFactory.Api.Middleware;
 using ContentFactory.Contracts;
 using ContentFactory.Core.Abstractions;
+using ContentFactory.Infrastructure.Billing;
 using ContentFactory.Infrastructure.Persistence;
 using ContentFactory.Infrastructure.Persistence.Entities;
 using ContentFactory.Infrastructure.Security;
@@ -39,6 +40,10 @@ builder.WebHost.ConfigureKestrel(options =>
 
 builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton(BudgetOptions.FromEnvironment());
+builder.Services.AddSingleton<LiveApprovalGuard>();
+builder.Services.AddScoped<PriceSnapshotService>();
+builder.Services.AddScoped<IBudgetGuard, PostgresBudgetGuard>();
 builder.Services.AddSingleton(storageOptions);
 builder.Services.AddScoped<FileSystemAssetStore>();
 builder.Services.AddScoped<IAssetStore>(services => services.GetRequiredService<FileSystemAssetStore>());

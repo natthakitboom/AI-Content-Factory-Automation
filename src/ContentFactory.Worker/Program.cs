@@ -1,4 +1,5 @@
 using ContentFactory.Core.Abstractions;
+using ContentFactory.Infrastructure.Billing;
 using ContentFactory.Infrastructure.Jobs;
 using ContentFactory.Infrastructure.Persistence;
 using ContentFactory.Worker;
@@ -21,6 +22,10 @@ builder.Services.Configure<HostOptions>(options =>
 
 builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton(BudgetOptions.FromEnvironment());
+builder.Services.AddSingleton<LiveApprovalGuard>();
+builder.Services.AddScoped<PriceSnapshotService>();
+builder.Services.AddScoped<IBudgetGuard, PostgresBudgetGuard>();
 builder.Services.AddSingleton<ResourceGovernor>();
 builder.Services.AddScoped<PostgresJobStore>(services =>
     new PostgresJobStore(

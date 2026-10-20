@@ -188,3 +188,52 @@ this file explains local choices and their consequences.
   with `qwen/qwen3.6-35b-a3b:2`; both runs produced validator-approved scripts, including one
   run that used the single allowed repair. Live LM Studio remains an optional local gate, not
   a CI dependency.
+
+## ADR-0012 — Paid work reserves explicit budget rows before submission
+
+- Date: 2026-10-20
+- Status: accepted
+- Context: D5 requires a price snapshot, a reservation, a settlement/release path and an
+  owner approval envelope before any paid provider call. The plan's C2 table list names
+  `budget_periods`, `cost_entries`, `provider_requests` and `price_snapshots` but does not
+  name a per-reservation table. Without one, `ReleaseAsync(reservationId, ...)` cannot
+  know which monthly/daily/campaign/video rows were debited, and a retry could decrement
+  them twice. The fixed `IBudgetGuard` signature also has no video id, while a per-video
+  cap must aggregate several scene requests.
+- Decision: add the internal `app.budget_reservations` table. It stores the operation id
+  (unique), campaign id, explicit video scope id, provider/model, price snapshot id,
+  approval id, reserved/settled USD, status (`reserved`, `unknown`, `settled`, `released`)
+  and a JSONB list of the exact `(budget_period_id, scope_type, amount)` allocations. The
+  table is an append-only audit/coordination record, not a second source of truth for
+  product or job state. `PostgresBudgetGuard` creates the monthly, daily, campaign and
+  video rows lazily with `ON CONFLICT DO NOTHING`, then locks them in the fixed order
+  monthly -> daily -> campaign -> video. It uses PostgreSQL `now()` for period boundaries
+  and timestamps, verifies the quote against the persisted price snapshot (including the
+  1.20 pilot margin), checks the per-request cap and every scope cap, and writes the
+  reservation plus the `reserve` cost entry in one transaction. A duplicate operation id
+  returns the existing reservation only when the provider, model and amount match; a
+  conflicting retry is a 409. Settlement decrements every allocated reserved amount and
+  adds the confirmed/estimated spend once; repeating the same settlement is a no-op.
+  A later different settlement amount records one signed adjustment/refund entry and
+  updates spend, with idempotency keyed by reservation and delta. Release is idempotent
+  and refuses to release a settled reservation. An uncertain provider submission calls
+  `MarkUnknownAsync`, which keeps every reserved amount and exposes the reservation for
+  reconciliation; it never converts an unknown bill to zero. The three-argument
+  `IBudgetGuard.ReserveAsync` uses the campaign id as a conservative video scope; the
+  added four-argument overload accepts the real video/revision id and defaults to the
+  three-argument method for existing implementations.
+- Approval: `LiveApprovalGuard` requires `ALLOW_PAID_APIS=true` and a local, bounded
+  `LIVE_APPROVAL_FILE`. It re-reads the file on every request, rejects missing, malformed,
+  expired, placeholder, provider/model-mismatched and fallback-enabled envelopes, and
+  requires an explicit `allowFallbackProvider:false`. Request-count and total-USD limits
+  are checked from `budget_reservations` inside the same transaction after the monthly
+  row is locked, so concurrent workers cannot both consume the last approval slot. The
+  guard also re-checks expiry against database time. `ALLOW_PAID_APIS=false` wins over
+  every provider and envelope.
+- Consequences: T09 adds one migration and an internal table not named in C2; T13 must
+  pass the revision/video id to the four-argument overload for a meaningful per-video cap.
+  Budget period limits are immutable once a period row exists; changing an environment
+  variable affects only new periods. Approval ids are cumulative, so a new live batch
+  should use a new approval id. No paid request, provider adapter or publication was
+  created by this task. API mappings are 403 for disabled/approval failures and 409 for
+  stale prices or exhausted budgets.

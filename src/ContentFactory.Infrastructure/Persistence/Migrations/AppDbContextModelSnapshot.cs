@@ -253,6 +253,108 @@ namespace ContentFactory.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ContentFactory.Infrastructure.Persistence.Entities.BudgetReservationRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AllocationsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("allocations_json");
+
+                    b.Property<string>("ApprovalId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("approval_id");
+
+                    b.Property<Guid>("CampaignId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("campaign_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("model");
+
+                    b.Property<string>("OperationId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("operation_id");
+
+                    b.Property<Guid>("PriceSnapshotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("price_snapshot_id");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("provider");
+
+                    b.Property<string>("ReleaseReason")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("release_reason");
+
+                    b.Property<DateTimeOffset?>("ReleasedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("released_at");
+
+                    b.Property<decimal>("ReservedUsd")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("reserved_usd");
+
+                    b.Property<DateTimeOffset?>("SettledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("settled_at");
+
+                    b.Property<decimal?>("SettledUsd")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("settled_usd");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("VideoScopeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("video_scope_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CampaignId")
+                        .HasDatabaseName("ix_budget_reservations_campaign");
+
+                    b.HasIndex("OperationId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_budget_reservations_operation");
+
+                    b.HasIndex("PriceSnapshotId");
+
+                    b.HasIndex("ApprovalId", "Status")
+                        .HasDatabaseName("ix_budget_reservations_approval_status");
+
+                    b.ToTable("budget_reservations", "app", t =>
+                        {
+                            t.HasCheckConstraint("ck_budget_reservations_amounts", "reserved_usd >= 0 AND (settled_usd IS NULL OR settled_usd >= 0)");
+
+                            t.HasCheckConstraint("ck_budget_reservations_status", "status IN ('reserved','unknown','settled','released')");
+                        });
+                });
+
             modelBuilder.Entity("ContentFactory.Infrastructure.Persistence.Entities.Campaign", b =>
                 {
                     b.Property<Guid>("Id")
@@ -516,6 +618,9 @@ namespace ContentFactory.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_cost_entries_operation");
 
                     b.HasIndex("PriceSnapshotId");
+
+                    b.HasIndex("ReservationId")
+                        .HasDatabaseName("ix_cost_entries_reservation");
 
                     b.ToTable("cost_entries", "app", t =>
                         {
@@ -1503,6 +1608,21 @@ namespace ContentFactory.Infrastructure.Persistence.Migrations
                     b.HasOne("ContentFactory.Infrastructure.Persistence.Entities.VideoVersion", null)
                         .WithMany()
                         .HasForeignKey("VideoVersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ContentFactory.Infrastructure.Persistence.Entities.BudgetReservationRecord", b =>
+                {
+                    b.HasOne("ContentFactory.Infrastructure.Persistence.Entities.Campaign", null)
+                        .WithMany()
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ContentFactory.Infrastructure.Persistence.Entities.PriceSnapshot", null)
+                        .WithMany()
+                        .HasForeignKey("PriceSnapshotId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

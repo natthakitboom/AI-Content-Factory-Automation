@@ -39,6 +39,7 @@ public sealed class AppDbContext : DbContext
     public DbSet<ProviderRequest> ProviderRequests => Set<ProviderRequest>();
     public DbSet<PriceSnapshot> PriceSnapshots => Set<PriceSnapshot>();
     public DbSet<BudgetPeriod> BudgetPeriods => Set<BudgetPeriod>();
+    public DbSet<BudgetReservationRecord> BudgetReservations => Set<BudgetReservationRecord>();
     public DbSet<CostEntry> CostEntries => Set<CostEntry>();
     public DbSet<Approval> Approvals => Set<Approval>();
     public DbSet<ExportPackage> ExportPackages => Set<ExportPackage>();
@@ -408,6 +409,37 @@ public sealed class AppDbContext : DbContext
                 "limit_usd >= 0 AND reserved_usd >= 0 AND spent_usd >= 0"));
         });
 
+        modelBuilder.Entity<BudgetReservationRecord>(entity =>
+        {
+            entity.ToTable("budget_reservations");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.OperationId).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Provider).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Model).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.ApprovalId).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.ReservedUsd).HasPrecision(18, 6);
+            entity.Property(x => x.SettledUsd).HasPrecision(18, 6);
+            entity.Property(x => x.AllocationsJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(x => x.ReleaseReason).HasMaxLength(512);
+            entity.HasOne<Campaign>().WithMany().HasForeignKey(x => x.CampaignId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<PriceSnapshot>().WithMany().HasForeignKey(x => x.PriceSnapshotId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => x.OperationId)
+                .IsUnique()
+                .HasDatabaseName("ux_budget_reservations_operation");
+            entity.HasIndex(x => new { x.ApprovalId, x.Status })
+                .HasDatabaseName("ix_budget_reservations_approval_status");
+            entity.HasIndex(x => x.CampaignId)
+                .HasDatabaseName("ix_budget_reservations_campaign");
+            entity.ToTable(t => t.HasCheckConstraint(
+                "ck_budget_reservations_status",
+                "status IN ('reserved','unknown','settled','released')"));
+            entity.ToTable(t => t.HasCheckConstraint(
+                "ck_budget_reservations_amounts",
+                "reserved_usd >= 0 AND (settled_usd IS NULL OR settled_usd >= 0)"));
+        });
+
         modelBuilder.Entity<CostEntry>(entity =>
         {
             entity.ToTable("cost_entries");
@@ -424,6 +456,8 @@ public sealed class AppDbContext : DbContext
                 .HasDatabaseName("ux_cost_entries_idempotency_key");
             entity.HasIndex(x => x.OperationId)
                 .HasDatabaseName("ix_cost_entries_operation");
+            entity.HasIndex(x => x.ReservationId)
+                .HasDatabaseName("ix_cost_entries_reservation");
             entity.ToTable(t => t.HasCheckConstraint(
                 "ck_cost_entries_type",
                 "entry_type IN ('reserve','settle','release','adjustment','refund')"));

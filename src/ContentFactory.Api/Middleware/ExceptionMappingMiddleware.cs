@@ -51,6 +51,38 @@ public sealed class ExceptionMappingMiddleware
                 exception.Message)
                 .ExecuteAsync(context);
         }
+        catch (PaidApisDisabledException exception) when (!context.Response.HasStarted)
+        {
+            await ApiProblem.Create(
+                StatusCodes.Status403Forbidden,
+                exception.Code,
+                exception.Message)
+                .ExecuteAsync(context);
+        }
+        catch (ApprovalStaleException exception) when (!context.Response.HasStarted)
+        {
+            await ApiProblem.Create(
+                StatusCodes.Status403Forbidden,
+                exception.Code,
+                exception.Message)
+                .ExecuteAsync(context);
+        }
+        catch (PriceStaleException exception) when (!context.Response.HasStarted)
+        {
+            await ApiProblem.Create(
+                StatusCodes.Status409Conflict,
+                exception.Code,
+                exception.Message)
+                .ExecuteAsync(context);
+        }
+        catch (BudgetExceededException exception) when (!context.Response.HasStarted)
+        {
+            await ApiProblem.Create(
+                StatusCodes.Status409Conflict,
+                exception.Code,
+                exception.Message)
+                .ExecuteAsync(context);
+        }
         catch (BadHttpRequestException exception) when (!context.Response.HasStarted)
         {
             var status = exception.StatusCode == StatusCodes.Status413PayloadTooLarge

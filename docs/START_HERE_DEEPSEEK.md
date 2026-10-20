@@ -14,10 +14,11 @@ test evidence.
 
 ## Current scope
 
-- Milestone M0: T00–T05 (foundation, contracts/schema, local auth, asset ingest,
-  safe process runner/manifest hashing, product/campaign snapshot + run enqueue).
-- Stop when the M0 gate is reached and report for owner review.
-- M1+ work must not start until the owner reviews M0.
+- M0 (T00–T05) is complete and was reviewed by the owner.
+- Milestone M1: T06–T12 (durable jobs, worker orchestration, local script planning,
+  budget/approval controls, narration, timeline/render, technical QA and review).
+- T00–T09 are complete; T10 is next. Stop at the M1 gate and report for owner review.
+- Do not start M2+ work until the owner reviews M1.
 
 ## Safety rails
 
@@ -73,7 +74,8 @@ database `content_factory` must never be used by tests.
 
 ## Task order
 
-T00 → T01 → T02 → T03 → T04 → T05 → M0 review.
+T00 → T01 → T02 → T03 → T04 → T05 → M0 review → T06 → T07 → T08 → T09 → T10 →
+T11 → T12 → M1 review.
 
 Each task follows RED → GREEN → review → progress update → commit. The exact test names
 and assertions are listed in the plan; implement those plus adjacent edge cases.

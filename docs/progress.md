@@ -1,7 +1,7 @@
 # Development progress
 
 ## Current milestone
-M1 — T06–T12 (T08 complete; T09 next)
+M1 — T06–T12 (T09 complete; T10 next)
 
 ## Task status
 | Task | Status | Commit | Evidence | Blocker |
@@ -15,6 +15,7 @@ M1 — T06–T12 (T08 complete; T09 next)
 | T06 | done | d68ad34 | `make build` → 0 warnings/0 errors; `make test-unit` → 31 passed; filtered `JobLeasingTests` → 7 passed; `make test-integration` → 35 passed; 100-job two-worker finalization test passed | No FFmpeg/LM Studio needed; provider uncertainty is blocked for reconciliation, not retried |
 | T07 | done | 16c1d6f | `make build` → 0 warnings/0 errors; `make test-unit` → 37 passed; filtered `WorkflowTests` → 6 passed; `make test-integration` → 40 passed; filtered `WorkerRecoveryTests` → 5 passed; no pending model changes | No FFmpeg/LM Studio needed; no provider calls; pause does not cancel running cloud work |
 | T08 | done | 0a1ee43, 9d3616f | `make build` → 0 warnings/0 errors; `make test-unit` → 47 passed; filtered `ScriptValidationTests` → 10 passed; `make test-integration` → 56 passed; filtered `PlannerAdapterTests` → 16 passed; live LM Studio smoke → 2/2 validator-approved runs; no pending model changes | Live LM Studio remains an optional local gate (not CI); no paid calls; token usage is captured in `ScriptPlanTrace` because the plan schema has no token column |
+| T09 | done | pending | `make build` → 0 warnings/0 errors; `make test-unit` → 56 passed; filtered `LiveApprovalTests` → 9 passed; `make test-integration` → 71 passed; filtered `BudgetRaceTests` → 15 passed; no pending model changes; `make migrate` applied `AddBudgetReservations` | No paid calls; FFmpeg/Node/port 3000 blockers unchanged; T13 must use the video-scope overload for a per-video cap |
 
 ## Last verified commands
 
@@ -295,6 +296,60 @@ snapshot, claim text or price is accepted as fact.
   LM Studio smoke is an optional local gate, not a CI dependency; CI still uses the fake
   HTTP handler and the mock provider.
 
+### T09
+- Command: `dotnet test tests/ContentFactory.UnitTests --filter LiveApprovalTests`
+  (before implementation)
+  - RED: build failed with `CS0234: The type or namespace name 'Billing' does not exist
+    in the namespace 'ContentFactory.Infrastructure'`. The approval guard and options
+    surface were absent; this was not a test assertion failure.
+- Command: `dotnet test tests/ContentFactory.IntegrationTests --filter BudgetRaceTests`
+  (before implementation)
+  - RED: build failed with the same missing `ContentFactory.Infrastructure.Billing`
+    namespace and the budget-guard/price-service surfaces did not exist.
+- Command: `dotnet test tests/ContentFactory.UnitTests --filter LiveApprovalTests`
+  → 9 passed, 0 failed, 0 skipped: `ValidApprovalIsAccepted`,
+  `PaidDisabledBlocksEvenWithValidApproval`, `MissingApprovalFileFailsClosed`,
+  `MalformedApprovalFailsClosed`, `PlaceholderApprovalFailsClosed`,
+  `ProviderOrModelMismatchFailsClosed`, `FallbackProviderFailsClosed`,
+  `ExpiredApprovalFailsClosed`, `ApprovalExpiresDuringBatch`.
+- Command: `dotnet test tests/ContentFactory.IntegrationTests --filter BudgetRaceTests`
+  → 15 passed, 0 failed, 0 skipped:
+  `ConcurrentReservationsCannotExceedLimit`, `SettlementIsIdempotent`,
+  `UnknownSubmissionKeepsReservation`, `StalePriceBlocksSpend`,
+  `VerifiedPriceQuoteUsesMargin`, `PaidDisabledBlocksEveryProvider`,
+  `DailyCapBlocksSpend`, `MonthlyCapBlocksSpend`, `CampaignCapBlocksSpend`,
+  `VideoCapBlocksSpend`, `SingleRequestCapBlocksSpend`,
+  `ApprovalRequestAndTotalCapsApply`, `ApprovalExpiresDuringBatch`,
+  `ReleaseTwiceDoesNotGoNegative`, `ConfirmedRefundAdjustsSpendWithoutDoubleCounting`.
+- Command: `make test-unit` → 56 passed, 0 failed, 0 skipped.
+- Command: `make test-integration` → 71 passed, 0 failed, 0 skipped (15 budget race,
+  16 planner adapter, 5 worker recovery, 7 job leasing, 5 campaign run, 8 asset ingest,
+  8 auth, 1 CLI, 6 schema).
+- Command: `make build` → 0 warnings, 0 errors.
+- Command: `dotnet ef migrations has-pending-model-changes --project
+  src/ContentFactory.Infrastructure --startup-project src/ContentFactory.Api`
+  → "No changes have been made to the model since the last migration."
+- Command: `make migrate` → applied `InitialSchema`, `AddJobClaimableIndex` and
+  `AddBudgetReservations` to the local application database; done.
+- Environment: macOS arm64, .NET SDK 10.0.402 (user-local), PostgreSQL 18 in Docker at
+  `127.0.0.1:54329`, `cf_test_<runid>` databases. Budget tests used a separate
+  `postgres-budget` collection fixture so its migrations and rows did not overlap the
+  schema/API fixture. The only approval files were temporary local test fixtures.
+  Verified 2026-10-20T16:35:00Z.
+- Notes: the reservation table is an internal coordination/audit record; the plan's C2
+  table list did not name it, so ADR-0012 records the addition. The guard locks budget
+  rows in the fixed order monthly -> daily -> campaign -> video, uses database `now()` for
+  periods and timestamps, verifies the quote against the persisted price snapshot
+  (including the 1.20 margin), and writes reservation + reserve cost entry in one
+  transaction. Twenty concurrent reservations against a 1.00 USD cap and 0.12 USD each
+  produced exactly eight successes (0.96 USD), no negative reserved/spent values, and no
+  ninth reservation. Settlement/release are idempotent; an unknown submission keeps the
+  reservation; a later reduced settlement writes one refund, not a duplicate. Approval
+  count/total checks run after the monthly row lock, so workers cannot both consume the
+  last slot; the envelope is re-read per request and also expiry-checked against database
+  time. `ALLOW_PAID_APIS=false` blocked every provider name before any budget or provider
+  row was written. No paid API, cloud upload, credential or publication was made.
+
 ### T06
 Created: `src/ContentFactory.Infrastructure/Jobs/PostgresJobStore.cs`,
 `Jobs/OutboxDispatcher.cs`, `Jobs/LeaseWatchdog.cs`,
@@ -363,6 +418,34 @@ fields, and allows exactly one repair. `LM_STUDIO_REASONING_EFFORT=none` is reco
 Qwen3.6 to disable hidden thinking and keep latency/heat down. The mock planner is
 deterministic and offline; `TEXT_PROVIDER=mock` remains the development default. Only local
 loopback requests were made; no paid API, model download or credential was used.
+
+### T09
+Created: `src/ContentFactory.Core/Exceptions/BudgetExceededException.cs`,
+`Core/Exceptions/PriceStaleException.cs`, `Core/Exceptions/ApprovalStaleException.cs`,
+`Core/Exceptions/PaidApisDisabledException.cs`,
+`src/ContentFactory.Infrastructure/Billing/BudgetOptions.cs`,
+`Billing/LiveApprovalEnvelope.cs`, `Billing/LiveApprovalGuard.cs`,
+`Billing/PriceSnapshotService.cs`, `Billing/PostgresBudgetGuard.cs`,
+`Billing/BillingDatabaseTime.cs`,
+`src/ContentFactory.Infrastructure/Persistence/Entities/BudgetReservationRecord.cs`,
+`Persistence/Migrations/20261020162647_AddBudgetReservations.cs` and its designer,
+`tests/ContentFactory.UnitTests/LiveApprovalTests.cs`,
+`tests/ContentFactory.IntegrationTests/BudgetRaceTests.cs`.
+Modified: `src/ContentFactory.Core/Abstractions/IBudgetGuard.cs` (additive video-scope
+overload with a default fallback), `src/ContentFactory.Infrastructure/Persistence/AppDbContext.cs`
+(`budget_reservations` DbSet/configuration and cost-entry reservation index),
+`Persistence/Migrations/AppDbContextModelSnapshot.cs`, `src/ContentFactory.Api/Program.cs`
+and `src/ContentFactory.Worker/Program.cs` (budget/approval/price services in DI),
+`src/ContentFactory.Api/Middleware/ExceptionMappingMiddleware.cs` (403 for paid-disabled
+or approval failures, 409 for stale prices or exceeded budgets), `docs/decisions.md`
+(ADR-0012), `docs/progress.md`.
+
+Notes: no provider adapter was called. `budget_reservations` stores exact budget-period
+allocations so release and settlement cannot guess or double-decrement monthly, daily,
+campaign or video rows. The three-argument `IBudgetGuard.ReserveAsync` remains compatible
+and uses the campaign id as the video scope; the added four-argument overload accepts a
+revision/video id so T13 can enforce a real per-video cap. The local app database was
+migrated; test databases are created and dropped by the integration fixture.
 
 ### T04
 Created: `src/ContentFactory.Infrastructure/Media/SafeProcessRunner.cs`,
@@ -472,21 +555,31 @@ it was not moved or rewritten.
 - ADR-0011: local script generation is untrusted until validated; LM Studio is loopback
   only, product facts are separate data, unknown claims and schema-invalid output are
   blocked, and at most one repair is allowed.
-- No plan-level architecture change.
+- ADR-0012: paid work reserves exact monthly/daily/campaign/video rows in PostgreSQL
+  before submission; the internal reservation record makes settle/release idempotent,
+  the approval envelope is re-read and count/total/expiry checked under the monthly lock,
+  and unknown submissions keep their reservation.
+- No plan-level architecture change beyond the internal reservation table and additive
+  video-scope overload.
 
 ## Paid API activity
 - Disabled; no paid requests authorized and none made.
 
 ## Next exact task
-- Task ID: T09 — Budget reservations, cost ledger and approval envelope
-- Inputs/files to read: plan T09 and the C4 budget/price contracts; `IBudgetGuard`,
-  `PriceQuote`, the PostgreSQL job/revision schema, and the T06 locking patterns.
-- First failing tests: `BudgetRaceTests` on real PostgreSQL — `ConcurrentReservationsCannotExceedLimit`,
-  `SettlementIsIdempotent`, `UnknownSubmissionKeepsReservation`, `StalePriceBlocksSpend`,
-  `PaidDisabledBlocksEveryProvider`, `ApprovalExpiresDuringBatch`; plus `LiveApprovalTests`.
-- Prerequisite: T01, T06. Keep `ALLOW_PAID_APIS=false`, `AUTO_PUBLISH=false` and
-  `PUBLISHING_MODE=manual_export`; no paid provider may be called while the envelope is
-  absent or expired.
-- Remaining blockers: FFmpeg/FFprobe missing, Node 26.11.1 vs pinned 24.22.0, and port
-  3000 occupied. T08's live LM Studio smoke passed locally and remains an optional gate;
-  its fake-HTTP adapter and validator tests passed.
+- Task ID: T10 — Narration adapter and phrase-level timing
+- Inputs/files to read: plan T10 (`## T10` near line 1151), the C4 `IVoiceProvider` and
+  voice/asset manifest contracts, `VoiceSegment`, T03 asset storage, T04 safe process
+  runner/FFprobe path, T08 script/caption phrases, and T09 `IBudgetGuard`/price service.
+- First failing tests: `tests/ContentFactory.UnitTests/VoiceManifestTests.cs` and
+  `tests/ContentFactory.IntegrationTests/VoiceProviderTests.cs` using recorded fixtures and
+  a fake HTTP handler: `MissingNarrationNeverBecomesSilentSuccess`,
+  `VoiceLocaleMismatchRejected`, `SsmlFromModelIsEscaped`, `CachedVoiceDoesNotChargeAgain`,
+  `ActualAudioDurationDefinesCaptionTiming`, plus the remaining T10 checklist cases.
+- Prerequisite: T03, T04, T08, T09. Keep `ALLOW_PAID_APIS=false`, `AUTO_PUBLISH=false` and
+  `PUBLISHING_MODE=manual_export`; no live Azure/TTS call, paid request or publication is
+  allowed. Build SSML with an XML writer, never string concatenation.
+- Remaining blockers: FFmpeg/FFprobe missing, so real duration probing/media tests may be
+  blocked (report `blocked`, never `passed`); Node 26.11.1 vs pinned 24.22.0 and port 3000
+  occupied remain environment blockers. T08's live LM Studio smoke is still an optional
+  local gate, not CI. T09 is committed after owner review; do not start T10 until the owner
+  says to continue.
