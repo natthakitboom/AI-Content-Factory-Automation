@@ -1,7 +1,7 @@
 # Development progress
 
 ## Current milestone
-M1 — T06–T12 (T07 complete; T08 next)
+M1 — T06–T12 (T08 complete; T09 next)
 
 ## Task status
 | Task | Status | Commit | Evidence | Blocker |
@@ -14,6 +14,7 @@ M1 — T06–T12 (T07 complete; T08 next)
 | T05 | done | 5b8c780 | `make build` → 0 warnings/0 errors; `make test-unit` → 31 passed; filtered `CampaignRunTests` → 5 passed; `make test-integration` → 28 passed | M0 gate reached; media/live gates still blocked (FFmpeg, LM Studio, Node 24) |
 | T06 | done | d68ad34 | `make build` → 0 warnings/0 errors; `make test-unit` → 31 passed; filtered `JobLeasingTests` → 7 passed; `make test-integration` → 35 passed; 100-job two-worker finalization test passed | No FFmpeg/LM Studio needed; provider uncertainty is blocked for reconciliation, not retried |
 | T07 | done | 16c1d6f | `make build` → 0 warnings/0 errors; `make test-unit` → 37 passed; filtered `WorkflowTests` → 6 passed; `make test-integration` → 40 passed; filtered `WorkerRecoveryTests` → 5 passed; no pending model changes | No FFmpeg/LM Studio needed; no provider calls; pause does not cancel running cloud work |
+| T08 | done | 0a1ee43 | `make build` → 0 warnings/0 errors; `make test-unit` → 47 passed; filtered `ScriptValidationTests` → 10 passed; `make test-integration` → 55 passed; filtered `PlannerAdapterTests` → 15 passed; no pending model changes | Live LM Studio smoke blocked; fake HTTP tests passed; no paid calls; token usage is captured in `ScriptPlanTrace` because the plan schema has no token column |
 
 ## Last verified commands
 
@@ -230,6 +231,56 @@ snapshot, claim text or price is accepted as fact.
   permit did not block the heavy-local lane. No provider API was called and no
   exactly-once provider guarantee is claimed.
 
+### T08
+- Command: `dotnet test tests/ContentFactory.UnitTests --filter ScriptValidationTests`
+  (before implementation)
+  - RED: build failed with `CS0234: The type or namespace name 'Campaigns' does not exist
+    in the namespace 'ContentFactory.Core'`, `CS0234: ... 'Providers' does not exist in
+    the namespace 'ContentFactory.Infrastructure'` and `CS0246: ScriptValidator could not
+    be found`. The validator contract was absent; this was not a test assertion failure.
+- Command: `dotnet test tests/ContentFactory.IntegrationTests --filter PlannerAdapterTests`
+  (before implementation)
+  - RED: build failed with the same missing `Campaigns`/`Providers` namespaces and
+    `CS0246: LmStudioScriptPlanner could not be found`. The fake-HTTP adapter surface did
+    not exist yet.
+- Command: `dotnet test tests/ContentFactory.UnitTests --filter ScriptValidationTests`
+  → 10 passed, 0 failed, 0 skipped: `ValidScriptPasses`, `UnknownClaimIdRejected`,
+  `DuplicateSceneIdsRejected`, `BenefitSceneWithoutClaimRejected`,
+  `SceneCountOutsideRangeRejected`, `MultipleMotionScenesRejected`,
+  `MarkupInCaptionRejected`, `UnknownAssetRejected`,
+  `MockPlannerProducesValidatorApprovedScript`, `PromptAndSchemaFilesMatchD2`.
+- Command: `dotnet test tests/ContentFactory.IntegrationTests --filter PlannerAdapterTests`
+  → 15 passed, 0 failed, 0 skipped: `ConfiguredModelIdIsSentAndUsageCaptured`,
+  `JsonStringContentIsParsed`, `PromptInjectionTreatedAsData`,
+  `MalformedJsonRepairedAtMostOnce`, `InvalidClaimIsRepairedOnceBeforePassing`,
+  `UnknownJsonFieldIsRepairedOnce`, `SecondMalformedJsonBlocksAfterOneRepair`,
+  `LocalModelUnavailableReturnsBlocked`, `LocalModelHttp503ReturnsBlocked`,
+  `LocalModelTimeoutReturnsBlocked`, `TruncatedFinishReasonBlocksWithoutRepair`,
+  `ProviderRefusalBlocksWithoutRepair`, `PublicBaseUrlRejectedBeforeNetworkCall`,
+  `MissingModelIdBlocksBeforeNetworkCall`, `PromptVersionMismatchBlocksBeforeNetworkCall`.
+- Command: `make test-unit` → 47 passed, 0 failed, 0 skipped.
+- Command: `make test-integration` → 55 passed, 0 failed, 0 skipped (15 planner adapter,
+  5 worker recovery, 7 job leasing, 5 campaign run, 8 asset ingest, 8 auth, 1 CLI,
+  6 schema).
+- Command: `make build` → 0 warnings, 0 errors.
+- Command: `dotnet ef migrations has-pending-model-changes --project
+  src/ContentFactory.Infrastructure --startup-project src/ContentFactory.Api`
+  → "No changes have been made to the model since the last migration."
+- Environment: macOS arm64, .NET SDK 10.0.402 (user-local), PostgreSQL 18 in Docker at
+  `127.0.0.1:54329`, `cf_test_<runid>` databases. Planner adapter tests used an in-process
+  fake HTTP handler; no LM Studio process, paid API or network AI call was made.
+  Verified 2026-10-20T16:05:00Z.
+- Notes: the LM Studio base URL must be loopback and credential-free; the model ID comes
+  only from configuration. Product facts are sent as a separate untrusted JSON message and
+  the system prompt is a fixed embedded resource. The adapter parses object or JSON-string
+  content, rejects unmapped fields, refuses tools/MCP/client secrets in the body, and sends
+  a configured local token only in the `Authorization` header. One repair is allowed;
+  malformed JSON or a failed business validation after that is `SCRIPT_INVALID`. Truncated,
+  refused, timed-out and unavailable responses are blocked without a blind retry. The
+  `ScriptPlanTrace` exposes prompt version, configured model ID and any response token
+  usage; the plan schema has no token-usage column, so no migration was invented. A live
+  LM Studio smoke test remains blocked because LM Studio is unreachable.
+
 ### T06
 Created: `src/ContentFactory.Infrastructure/Jobs/PostgresJobStore.cs`,
 `Jobs/OutboxDispatcher.cs`, `Jobs/LeaseWatchdog.cs`,
@@ -273,6 +324,29 @@ Notes: no schema/model change was needed. Pause/resume reuses the existing job s
 column. The API endpoints are authenticated and mutations remain CSRF-protected. The
 worker has no provider handler registered yet, so no paid or network AI call can occur in
 this task.
+
+### T08
+Created: `src/ContentFactory.Core/Campaigns/ScriptValidator.cs`,
+`src/ContentFactory.Core/Campaigns/ScriptPlanResult.cs`,
+`src/ContentFactory.Core/Exceptions/ScriptPlanningException.cs`,
+`src/ContentFactory.Infrastructure/Providers/LmStudio/LmStudioOptions.cs`,
+`src/ContentFactory.Infrastructure/Providers/LmStudio/LmStudioScriptPlanner.cs`,
+`src/ContentFactory.Infrastructure/Providers/Mock/MockScriptPlanner.cs`,
+`media/prompts/script-planner.v1.txt`,
+`media/schemas/script-document.v1.schema.json`,
+`tests/ContentFactory.UnitTests/ScriptValidationTests.cs`,
+`tests/ContentFactory.IntegrationTests/PlannerAdapterTests.cs`.
+Modified: `src/ContentFactory.Infrastructure/ContentFactory.Infrastructure.csproj`
+(embedded prompt resource), `docs/decisions.md` (ADR-0011), `docs/progress.md`.
+
+Notes: the validator is provider-independent and enforces schemaVersion 1, 3–6 scenes,
+unique scene IDs, allowed roles, known claim IDs, claims on benefit/demo scenes, known
+preferred assets, at most one motion scene, and plain narration/caption text. The LM Studio
+adapter only calls a loopback endpoint, sends the configured model ID, keeps product facts
+as a separate untrusted user message, rejects unmapped JSON fields, and allows exactly one
+repair. The mock planner is deterministic and offline; `TEXT_PROVIDER=mock` remains the
+development default. No real LM Studio request, paid API, model download or credential was
+used.
 
 ### T04
 Created: `src/ContentFactory.Infrastructure/Media/SafeProcessRunner.cs`,
@@ -379,21 +453,24 @@ it was not moved or rewritten.
 - ADR-0010: the D1 stage graph is code-defined; lease loss cancels local work, finalize
   and child-event insertion share one transaction, and pause/resume withholds only new
   heavy/paid work without cancelling running cloud requests.
+- ADR-0011: local script generation is untrusted until validated; LM Studio is loopback
+  only, product facts are separate data, unknown claims and schema-invalid output are
+  blocked, and at most one repair is allowed.
 - No plan-level architecture change.
 
 ## Paid API activity
 - Disabled; no paid requests authorized and none made.
 
 ## Next exact task
-- Task ID: T08 — LM Studio script planner and strict validation
-- Inputs/files to read: plan D2 and T08; `ScriptRequest`, `ScriptDocument`,
-  `IScriptPlanner`, `IScriptValidator`, `ApprovedClaim`, and the T07 workflow/outbox path.
-- First failing tests: `ScriptValidationTests` — `UnknownClaimIdRejected`,
-  `PromptInjectionTreatedAsData`, `DuplicateSceneIdsRejected`,
-  `MalformedJsonRepairedAtMostOnce`, `LocalModelUnavailableReturnsBlocked`; and planner
-  adapter tests against a fake local HTTP endpoint.
-- Prerequisite: T04, T05, T07. Keep `TEXT_PROVIDER=mock` by default, send product facts as
-  untrusted data separate from instructions, and never fall back to a paid provider.
+- Task ID: T09 — Budget reservations, cost ledger and approval envelope
+- Inputs/files to read: plan T09 and the C4 budget/price contracts; `IBudgetGuard`,
+  `PriceQuote`, the PostgreSQL job/revision schema, and the T06 locking patterns.
+- First failing tests: `BudgetRaceTests` on real PostgreSQL — `ConcurrentReservationsCannotExceedLimit`,
+  `SettlementIsIdempotent`, `UnknownSubmissionKeepsReservation`, `StalePriceBlocksSpend`,
+  `PaidDisabledBlocksEveryProvider`, `ApprovalExpiresDuringBatch`; plus `LiveApprovalTests`.
+- Prerequisite: T01, T06. Keep `ALLOW_PAID_APIS=false`, `AUTO_PUBLISH=false` and
+  `PUBLISHING_MODE=manual_export`; no paid provider may be called while the envelope is
+  absent or expired.
 - Remaining blockers: FFmpeg/FFprobe missing, LM Studio unreachable, Node 26.11.1 vs
-  pinned 24.22.0, and port 3000 occupied. T08 may be implemented against a fake HTTP
-  endpoint without LM Studio; a live smoke test remains blocked.
+  pinned 24.22.0, and port 3000 occupied. T08's live LM Studio smoke test is blocked; its
+  fake-HTTP adapter and validator tests passed.
