@@ -1,7 +1,7 @@
 # Development progress
 
 ## Current milestone
-M1 — T06–T12 (T09 complete; T10 next)
+M1 — T06–T12 (T10 complete; T11 next)
 
 ## Task status
 | Task | Status | Commit | Evidence | Blocker |
@@ -16,6 +16,7 @@ M1 — T06–T12 (T09 complete; T10 next)
 | T07 | done | 16c1d6f | `make build` → 0 warnings/0 errors; `make test-unit` → 37 passed; filtered `WorkflowTests` → 6 passed; `make test-integration` → 40 passed; filtered `WorkerRecoveryTests` → 5 passed; no pending model changes | No FFmpeg/LM Studio needed; no provider calls; pause does not cancel running cloud work |
 | T08 | done | 0a1ee43, 9d3616f | `make build` → 0 warnings/0 errors; `make test-unit` → 47 passed; filtered `ScriptValidationTests` → 10 passed; `make test-integration` → 56 passed; filtered `PlannerAdapterTests` → 16 passed; live LM Studio smoke → 2/2 validator-approved runs; no pending model changes | Live LM Studio remains an optional local gate (not CI); no paid calls; token usage is captured in `ScriptPlanTrace` because the plan schema has no token column |
 | T09 | done | 115360a | `make build` → 0 warnings/0 errors; `make test-unit` → 56 passed; filtered `LiveApprovalTests` → 9 passed; `make test-integration` → 71 passed; filtered `BudgetRaceTests` → 15 passed; no pending model changes; `make migrate` applied `AddBudgetReservations` | No paid calls; FFmpeg/Node/port 3000 blockers unchanged; T13 must use the video-scope overload for a per-video cap |
+| T10 | done | 6bd8282 | `make build` → 0 warnings/0 errors; `make test-unit` → 73 passed; `make test-integration` → 82 passed; filtered `VoiceManifestTests` → 17 passed; filtered `VoiceProviderTests` → 11 passed; no pending model changes; `make test-media` → exit 2 blocked | No live Azure/paid calls; real FFprobe/FFmpeg execution blocked because the binaries are missing; adapter is not yet wired to a worker stage (T12) |
 
 ## Last verified commands
 
@@ -350,6 +351,68 @@ snapshot, claim text or price is accepted as fact.
   time. `ALLOW_PAID_APIS=false` blocked every provider name before any budget or provider
   row was written. No paid API, cloud upload, credential or publication was made.
 
+### T10
+- Command: `dotnet test tests/ContentFactory.UnitTests --filter VoiceManifestTests`
+  (before implementation)
+  - RED: build failed with `CS0234: The type or namespace name 'Voice' does not exist in
+    the namespace 'ContentFactory.Infrastructure.Providers'`. The voice adapter,
+    assembler and probe surfaces were absent; this was not a test assertion failure.
+- Command: `dotnet test tests/ContentFactory.IntegrationTests --filter VoiceProviderTests`
+  (before implementation)
+  - RED: build failed with the same missing `Providers.Voice` namespace.
+- Command: `dotnet test tests/ContentFactory.UnitTests --filter VoiceManifestTests`
+  → 17 passed, 0 failed, 0 skipped: `MissingNarrationNeverBecomesSilentSuccess`,
+  `VoiceLocaleMismatchRejected`, `UploadedNarrationResolvesFromSceneMapping`,
+  `UploadedPhraseMappingResolvesByPhraseIndex`,
+  `UploadedNarrationMustMatchApprovedTextHash`, `MissingUploadedNarrationIsRejected`,
+  `SsmlFromModelIsEscaped`, `CachedVoiceDoesNotChargeAgain`,
+  `CacheKeyIncludesTextVoiceLocaleAndConfig`,
+  `ActualAudioDurationDefinesCaptionTiming`, `SilentNarrationIsRejected`,
+  `CorruptNarrationIsRejected`, `NarrationOverThirtyFiveSecondsIsBlockedWithoutRetry`,
+  `PhraseSplitterNeverSplitsThaiGrapheme`,
+  `RecordedFfprobeJsonProvidesMeasuredDuration`, `FileVoiceCacheSurvivesANewProviderInstance`,
+  `UploadedNarrationDoesNotRequirePaidBillingScope`.
+- Command: `dotnet test tests/ContentFactory.IntegrationTests --filter VoiceProviderTests`
+  → 11 passed, 0 failed, 0 skipped:
+  `FetchesAllowedVoicesAndSynthesizesWithEscapedSsml`, `VoiceListIsFetchedOncePerProvider`,
+  `VoiceLocaleMismatchRejectedBeforeSynthesis`, `UnknownVoiceRejectedBeforeSynthesis`,
+  `MissingSpeechPriceBlocksBeforeAnyHttp`, `PaidApisSwitchBlocksBeforeAnyHttp`,
+  `PaidApisDisabledBlocksBeforeSynthesis`, `DefinitiveRejectionReleasesReservation`,
+  `UncertainFailureKeepsReservation`, `EmptyProviderResponseKeepsReservation`,
+  `UnscopedSynthesisIsRejectedWithoutHttp`.
+- Command: `make build` → 0 warnings, 0 errors.
+- Command: `make test-unit` → 73 passed, 0 failed, 0 skipped.
+- Command: `make test-integration` → 82 passed, 0 failed, 0 skipped (15 budget race,
+  11 voice provider, 16 planner adapter, 5 worker recovery, 7 job leasing, 5 campaign run,
+  8 asset ingest, 8 auth, 1 CLI, 6 schema).
+- Command: `dotnet ef migrations has-pending-model-changes --project
+  src/ContentFactory.Infrastructure --startup-project src/ContentFactory.Api --no-build`
+  → "No changes have been made to the model since the last migration."
+- Command: `make test-media` → exit 2, blocked: "FFmpeg/FFprobe are not installed;
+  media tests are blocked (not passed)."
+- Environment: macOS arm64, .NET SDK 10.0.402 (user-local), PostgreSQL 18 in Docker at
+  `127.0.0.1:54329`, `cf_test_<runid>` databases. Azure tests used an in-process fake HTTP
+  handler and a recorded voice-list fixture; no live Azure or TTS call was made.
+  Verified 2026-10-20T17:25:24Z.
+- Notes: `UploadedVoiceProvider` resolves deterministic
+  `voice:<revision>:<scene>[:p<index>]` operation ids, checks locale and an optional
+  approved text hash, and never substitutes silence. `AzureSpeechVoiceProvider` requires
+  both `ALLOW_PAID_APIS=true` and `EnableSynthesis=true`, fetches the allowed voice list
+  from the configured endpoint, requires an exact voice/locale match, builds SSML with
+  `XmlWriter` (model text escaped), obtains a verified quote, reserves through
+  `IBudgetGuard` with the campaign and video/revision scope, and settles only after a valid
+  audio asset is stored. A definite 400/401/403/404/422 releases the reservation; 5xx,
+  timeout, malformed or empty responses keep it. `VoiceAssembler` splits only at sentence
+  punctuation/whitespace, probes every phrase and combined scene, rejects corrupt, empty
+  and silent narration, enforces the 35-second narration limit, and records phrase mappings
+  in a canonical `VoiceManifest`. The cache key is SHA-256 over text hash, voice id, locale,
+  synthesis config hash and provider version; the file cache stores only immutable asset
+  references. The default `VOICE_PROVIDER=uploaded` path needs no price or reservation.
+  Actual FFprobe/FFmpeg execution and the phrase concatenator remain blocked in this
+  checkout because those binaries are absent; the tests use a recorded FFprobe JSON fixture
+  and injected probe/concatenator doubles, not a claim that native media probing ran. The
+  published adapter is not wired to a worker stage yet (T12).
+
 ### T06
 Created: `src/ContentFactory.Infrastructure/Jobs/PostgresJobStore.cs`,
 `Jobs/OutboxDispatcher.cs`, `Jobs/LeaseWatchdog.cs`,
@@ -446,6 +509,29 @@ campaign or video rows. The three-argument `IBudgetGuard.ReserveAsync` remains c
 and uses the campaign id as the video scope; the added four-argument overload accepts a
 revision/video id so T13 can enforce a real per-video cap. The local app database was
 migrated; test databases are created and dropped by the integration fixture.
+
+### T10
+Created: `src/ContentFactory.Core/Abstractions/IPaidVoiceProvider.cs`,
+`src/ContentFactory.Infrastructure/Billing/IVoicePriceQuoter.cs`,
+`src/ContentFactory.Infrastructure/Providers/Voice/UploadedVoiceProvider.cs`,
+`Providers/Voice/AzureSpeechVoiceProvider.cs`,
+`src/ContentFactory.Infrastructure/Media/VoiceAssembler.cs`,
+`Media/FfprobeAudioProbe.cs`, `Media/FfmpegAudioConcatenator.cs`,
+`tests/ContentFactory.UnitTests/VoiceManifestTests.cs`,
+`tests/ContentFactory.UnitTests/Fixtures/Voice/ffprobe-audio.json`,
+`tests/ContentFactory.IntegrationTests/VoiceProviderTests.cs`,
+`tests/ContentFactory.IntegrationTests/Fixtures/Voice/voices-th-TH.json`.
+Modified: `src/ContentFactory.Infrastructure/Billing/PriceSnapshotService.cs`
+(implements `IVoicePriceQuoter`), unit/integration test project files (copy voice fixtures),
+`docs/decisions.md` (ADR-0013), `docs/progress.md`.
+
+Notes: no database migration was added. `IPaidVoiceProvider` prevents a paid adapter from
+being called through the unscoped `IVoiceProvider` method; paid synthesis requires an
+explicit campaign and video/revision scope and runs through the existing PostgreSQL budget
+guard. Uploaded narration is an immutable asset lookup and never incurs a TTS charge.
+`FileVoiceAssetCache` persists only asset references under `DATA_ROOT/voice-cache`; the
+text itself is not written to a cache path or filename. Synthetic WAV bytes in the adapter
+tests are transport fixtures, not production narration acceptance.
 
 ### T04
 Created: `src/ContentFactory.Infrastructure/Media/SafeProcessRunner.cs`,
@@ -559,27 +645,31 @@ it was not moved or rewritten.
   before submission; the internal reservation record makes settle/release idempotent,
   the approval envelope is re-read and count/total/expiry checked under the monthly lock,
   and unknown submissions keep their reservation.
-- No plan-level architecture change beyond the internal reservation table and additive
-  video-scope overload.
+- ADR-0013: narration is validated by FFprobe, cached by text/voice/locale/config/provider
+  version, and paid TTS uses the same budget/live-approval guard as video; uploaded
+  narration needs no charge, SSML is written with an XML writer, and missing/silent audio
+  fails closed instead of becoming an empty success.
+- No plan-level architecture change beyond the internal reservation table, the additive
+  video-scope overload, and the internal paid-voice/price-quoter interfaces.
 
 ## Paid API activity
 - Disabled; no paid requests authorized and none made.
 
 ## Next exact task
-- Task ID: T10 — Narration adapter and phrase-level timing
-- Inputs/files to read: plan T10 (`## T10` near line 1151), the C4 `IVoiceProvider` and
-  voice/asset manifest contracts, `VoiceSegment`, T03 asset storage, T04 safe process
-  runner/FFprobe path, T08 script/caption phrases, and T09 `IBudgetGuard`/price service.
-- First failing tests: `tests/ContentFactory.UnitTests/VoiceManifestTests.cs` and
-  `tests/ContentFactory.IntegrationTests/VoiceProviderTests.cs` using recorded fixtures and
-  a fake HTTP handler: `MissingNarrationNeverBecomesSilentSuccess`,
-  `VoiceLocaleMismatchRejected`, `SsmlFromModelIsEscaped`, `CachedVoiceDoesNotChargeAgain`,
-  `ActualAudioDurationDefinesCaptionTiming`, plus the remaining T10 checklist cases.
-- Prerequisite: T03, T04, T08, T09. Keep `ALLOW_PAID_APIS=false`, `AUTO_PUBLISH=false` and
-  `PUBLISHING_MODE=manual_export`; no live Azure/TTS call, paid request or publication is
-  allowed. Build SSML with an XML writer, never string concatenation.
-- Remaining blockers: FFmpeg/FFprobe missing, so real duration probing/media tests may be
-  blocked (report `blocked`, never `passed`); Node 26.11.1 vs pinned 24.22.0 and port 3000
-  occupied remain environment blockers. T08's live LM Studio smoke is still an optional
-  local gate, not CI. T09 is committed after owner review; do not start T10 until the owner
-  says to continue.
+- Task ID: T11 — Timeline compiler, Thai captions and native FFmpeg renderer
+- Inputs/files to read: plan T11 (`## T11` near line 1177), the C4 `ITimelineCompiler`,
+  `IVideoRenderer`, `RenderManifest` and `RenderResult` contracts, D4 caption/timing
+  rules, T10 `VoiceSegment`/`VoiceManifest`, T04 `SafeProcessRunner` and `ManifestHasher`,
+  T03 asset storage, and the current mock video renderer path.
+- First failing tests: `tests/ContentFactory.UnitTests/TimelineTests.cs` and
+  `tests/ContentFactory.MediaTests/RenderGoldenTests.cs`:
+  `ThaiMarksStayWithBaseCharacter`, `AssOverrideTextRenderedLiterally`,
+  `CaptionOverflowBlocksRender`, `NarrationNeverCutMidWord`,
+  `TimelineDurationUsesFrameGrid`, `MissingHardwareEncoderFallsBackExplicitly`.
+- Prerequisite: T03, T04, T08, T10. Keep `ALLOW_PAID_APIS=false`, `AUTO_PUBLISH=false` and
+  `PUBLISHING_MODE=manual_export`; no paid request or publication is allowed. A video must
+  be a real MP4 produced through native media tooling, never a renamed placeholder image.
+- Remaining blockers: FFmpeg/FFprobe and a Thai-capable font are missing, so native render,
+  encoder/font probes and golden media tests must be reported `blocked`/`skipped`, never
+  `passed`; Node 26.11.1 vs pinned 24.22.0 and port 3000 occupancy remain environment
+  blockers. T10 is committed; do not start T11 until the owner reviews and says to continue.
