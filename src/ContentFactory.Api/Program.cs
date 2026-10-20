@@ -1,6 +1,108 @@
+using System.Security.Claims;
+using ContentFactory.Api.Endpoints;
+using ContentFactory.Api.Middleware;
+using ContentFactory.Infrastructure.Persistence;
+using ContentFactory.Infrastructure.Persistence.Entities;
+using ContentFactory.Infrastructure.Security;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+
 var builder = WebApplication.CreateBuilder(args);
+
+LocalBindingGuard.Validate(builder.Configuration["ASPNETCORE_URLS"]);
+
+var connectionString = builder.Configuration.GetConnectionString("App");
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    connectionString = DatabaseConnection.FromEnvironment();
+}
+
+builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<LoginThrottle>();
+builder.Services.AddSingleton<IPasswordHasher<OwnerUser>, PasswordHasher<OwnerUser>>();
+builder.Services.AddSingleton(new SecretRedactor(
+[
+    builder.Configuration["FAL_KEY"],
+    builder.Configuration["AZURE_SPEECH_KEY"],
+    builder.Configuration["LM_STUDIO_API_TOKEN"],
+    builder.Configuration["DATABASE_PASSWORD"],
+    builder.Configuration.GetConnectionString("App")
+]));
+builder.Services.AddProblemDetails();
+
+builder.Services
+    .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.Cookie.Name = "cf_auth";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Strict;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+        options.SlidingExpiration = false;
+
+        options.Events.OnRedirectToLogin = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return Task.CompletedTask;
+        };
+        options.Events.OnRedirectToAccessDenied = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return Task.CompletedTask;
+        };
+        options.Events.OnValidatePrincipal = async context =>
+        {
+            var principal = context.Principal;
+            var idValue = principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+            var versionValue = principal?.FindFirstValue(AuthEndpoints.SessionVersionClaim);
+
+            if (!Guid.TryParse(idValue, out var ownerId)
+                || !int.TryParse(versionValue, out var sessionVersion))
+            {
+                context.RejectPrincipal();
+                await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                return;
+            }
+
+            var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+            var owner = await db.OwnerUsers
+                .AsNoTracking()
+                .SingleOrDefaultAsync(x => x.Id == ownerId, context.HttpContext.RequestAborted);
+
+            if (owner is null || !owner.Active || owner.SessionVersion != sessionVersion)
+            {
+                context.RejectPrincipal();
+                await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            }
+        };
+    });
+
+builder.Services.AddAuthorization();
+
 var app = builder.Build();
 
-app.MapGet("/", () => "Hello World!");
+app.UseMiddleware<LocalRequestGuard>();
+app.UseMiddleware<RequestLoggingMiddleware>();
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseMiddleware<CsrfMiddleware>();
+
+app.MapGet("/health/live", () => Results.Ok(new { status = "live" })).AllowAnonymous();
+app.MapGet("/health/ready", async (AppDbContext db, CancellationToken ct) =>
+{
+    var ready = await db.Database.CanConnectAsync(ct);
+    return ready
+        ? Results.Ok(new { status = "ready" })
+        : Results.Json(new { status = "not_ready" }, statusCode: StatusCodes.Status503ServiceUnavailable);
+}).AllowAnonymous();
+
+app.MapAuthEndpoints();
 
 app.Run();
+
+public partial class Program;

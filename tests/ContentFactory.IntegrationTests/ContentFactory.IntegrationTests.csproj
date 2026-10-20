@@ -25,6 +25,7 @@
     <ProjectReference Include="..\..\src\ContentFactory.Core\ContentFactory.Core.csproj" />
     <ProjectReference Include="..\..\src\ContentFactory.Infrastructure\ContentFactory.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\ContentFactory.Api\ContentFactory.Api.csproj" />
+    <ProjectReference Include="..\..\src\ContentFactory.Cli\ContentFactory.Cli.csproj" />
   </ItemGroup>
 
 </Project>

@@ -18,7 +18,7 @@ endif
 -include .env.test.local
 export
 
-.PHONY: help doctor build infra-up infra-down migrate test-unit test-integration test-media verify env-check clean
+.PHONY: help doctor build infra-up infra-down migrate owner-init test-unit test-integration test-media verify env-check clean
 
 help:
 	@echo "Content Factory — M0 commands"
@@ -42,6 +42,9 @@ infra-down:
 migrate: env-check
 	$(DOTNET) tool restore
 	$(DOTNET) ef database update --project src/ContentFactory.Infrastructure --startup-project src/ContentFactory.Api
+
+owner-init: env-check
+	$(DOTNET) run --project src/ContentFactory.Cli -- init-owner
 
 build:
 	$(DOTNET) build ContentFactory.slnx --nologo

@@ -8,7 +8,7 @@ M0 — T00–T05
 |---|---|---|---|---|
 | T00 | done | 1ee6bfa | `dotnet test tests/ContentFactory.UnitTests --filter RepositoryBootstrapTests` → 7 passed; `scripts/doctor.sh` → exit 2 | Node 24 pin not installed, FFmpeg/FFprobe missing, port 3000 busy (media/live gates blocked) |
 | T01 | done | pending | `make test-unit` → 9 passed; `make test-integration` → 6 passed; `make migrate` twice → second run no-op | PostgreSQL in Docker on loopback; test DBs are `cf_test_<runid>` and dropped |
-| T02 | not_started | - | - | - |
+| T02 | done | pending | `make test-unit` → 11 passed; `make test-integration` → 15 passed (8 auth + 1 CLI + 6 schema) | Dashboard proxy not built in M0; deferred with UI tasks |
 | T03 | not_started | - | - | - |
 | T04 | not_started | - | - | - |
 | T05 | not_started | - | - | - |
@@ -43,7 +43,31 @@ M0 — T00–T05
 - Command: `dotnet ef migrations has-pending-model-changes` → "No changes have been
   made to the model since the last migration."
 
+### T02
+- Command: `make test-integration` (before implementation)
+  - RED: 8 authentication tests failed because the API had no DbContext/auth endpoints;
+    the 6 schema tests still passed. Failure was missing implementation, not environment.
+  - GREEN: 15 passed, 0 failed, 0 skipped (8 auth, 1 CLI, 6 schema).
+- Command: `make test-unit` → 11 passed, 0 failed, 0 skipped (2 new secret-redactor tests).
+- Notes: no interactive `make owner-init` run was claimed. The CLI hashing path is
+  exercised by `InitOwnerCommandTests` against the test database.
+
 ## Files changed
+
+### T02
+Created: `src/ContentFactory.Infrastructure/Security/SecretRedactor.cs`,
+`Security/LoginThrottle.cs`, `Persistence/DatabaseConnection.cs`,
+`src/ContentFactory.Api/Middleware/LocalRequestGuard.cs`,
+`Middleware/CsrfMiddleware.cs`, `Middleware/RequestLoggingMiddleware.cs`,
+`Middleware/LocalBindingGuard.cs`, `Middleware/ApiProblem.cs`,
+`src/ContentFactory.Api/Endpoints/AuthEndpoints.cs`,
+`src/ContentFactory.Cli/Commands/InitOwnerCommand.cs`,
+`tests/ContentFactory.IntegrationTests/Api/CapturingLoggerProvider.cs`,
+`Api/ApiFactory.cs`, `Api/ApiTestFixture.cs`, `AuthenticationTests.cs`,
+`InitOwnerCommandTests.cs`, `tests/ContentFactory.UnitTests/SecretRedactorTests.cs`.
+Modified: `src/ContentFactory.Api/Program.cs`, `src/ContentFactory.Cli/Program.cs`,
+`src/ContentFactory.Cli/ContentFactory.Cli.csproj` (ASP.NET shared framework for
+PasswordHasher), integration test project reference, `Makefile` (`owner-init`).
 
 ### T01
 Created: `src/ContentFactory.Contracts/*` (C4 DTOs, enums and `JsonDefaults`),
@@ -90,9 +114,10 @@ it was not moved or rewritten.
 - Disabled; no paid requests authorized and none made.
 
 ## Next exact task
-- Task ID: T02 — Local owner authentication and secret isolation
-- Inputs/files to read: plan E1, I6, C5 auth routes, T02
-- First failing tests: `AuthenticationTests` — `AnonymousMutationReturns401`,
-  `MissingCsrfRejected`, `ForeignOriginRejected`, `InvalidHostRejected`,
-  `SecretsNeverAppearInLogs`
-- Prerequisite: T01 schema; PostgreSQL reachable; no FFmpeg needed.
+- Task ID: T03 — Asset ingest, rights and content-addressed storage
+- Inputs/files to read: plan E1, C2 assets, C4 IAssetStore, T03
+- First failing tests: `AssetPathTests` and `AssetIngestTests` —
+  `TraversalAndSymlinkEscapeRejected`, `ThaiFilenameDoesNotBecomeDiskPath`,
+  `SvgDisguisedAsJpegRejected`, `OversizedUploadRejected`,
+  `RightsRequiredForProduction`
+- Prerequisite: T01/T02; PostgreSQL reachable; no FFmpeg needed.
