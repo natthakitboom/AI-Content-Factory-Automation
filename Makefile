@@ -3,15 +3,22 @@ SHELL := /bin/bash
 
 # Prefer the user-local .NET 10 SDK installed without sudo. If it is absent the
 # system dotnet is used; global.json will fail clearly when that SDK is too old.
-export PATH := $(HOME)/.dotnet:$(PATH)
-DOTNET ?= dotnet
+DOTNET ?= $(HOME)/.dotnet/dotnet
+ifeq ($(wildcard $(DOTNET)),)
+DOTNET := dotnet
+endif
 
 ifneq (,$(wildcard ./.env))
 include .env
 export
 endif
 
-.PHONY: help doctor build test-unit test-integration test-media verify env-check clean
+# Local-only test connection (ignored by git). Included so `make test-integration`
+# works without exporting a semicolon-containing value in the shell.
+-include .env.test.local
+export
+
+.PHONY: help doctor build infra-up infra-down migrate test-unit test-integration test-media verify env-check clean
 
 help:
 	@echo "Content Factory — M0 commands"
@@ -24,7 +31,17 @@ help:
 	@echo "  make env-check         Verify local .env exists and is not tracked"
 
 doctor:
-	@./scripts/doctor.sh
+	@PATH="$(HOME)/.dotnet:$$PATH" ./scripts/doctor.sh
+
+infra-up: env-check
+	docker compose -f infra/compose.yaml --env-file .env up -d --wait
+
+infra-down:
+	docker compose -f infra/compose.yaml --env-file .env down
+
+migrate: env-check
+	$(DOTNET) tool restore
+	$(DOTNET) ef database update --project src/ContentFactory.Infrastructure --startup-project src/ContentFactory.Api
 
 build:
 	$(DOTNET) build ContentFactory.slnx --nologo

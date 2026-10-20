@@ -1,0 +1,27 @@
+name: content-factory
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: content-factory-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:-content_factory}
+      POSTGRES_USER: ${DATABASE_USER:-content_factory}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?set DATABASE_PASSWORD in .env}
+      TZ: UTC
+    ports:
+      - "127.0.0.1:${DATABASE_PORT:-54329}:5432"
+    volumes:
+      - content_factory_pgdata:/var/lib/postgresql
+      - ./postgres/init-test-db.sql:/docker-entrypoint-initdb.d/00-init-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 6g
+
+volumes:
+  content_factory_pgdata:
+    name: content_factory_pgdata

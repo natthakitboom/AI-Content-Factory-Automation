@@ -6,8 +6,8 @@ M0 — T00–T05
 ## Task status
 | Task | Status | Commit | Evidence | Blocker |
 |---|---|---|---|---|
-| T00 | done | pending | `dotnet test tests/ContentFactory.UnitTests --filter RepositoryBootstrapTests` → 7 passed; `scripts/doctor.sh` → exit 2 | Node 24 pin not installed, FFmpeg/FFprobe missing, port 3000 busy (media/live gates blocked) |
-| T01 | not_started | - | - | - |
+| T00 | done | 1ee6bfa | `dotnet test tests/ContentFactory.UnitTests --filter RepositoryBootstrapTests` → 7 passed; `scripts/doctor.sh` → exit 2 | Node 24 pin not installed, FFmpeg/FFprobe missing, port 3000 busy (media/live gates blocked) |
+| T01 | done | pending | `make test-unit` → 9 passed; `make test-integration` → 6 passed; `make migrate` twice → second run no-op | PostgreSQL in Docker on loopback; test DBs are `cf_test_<runid>` and dropped |
 | T02 | not_started | - | - | - |
 | T03 | not_started | - | - | - |
 | T04 | not_started | - | - | - |
@@ -28,7 +28,41 @@ M0 — T00–T05
   - Warnings: `DATA_ROOT` unset; LM Studio unreachable.
   - Environment: 2026-10-20T14:42:15Z.
 
+### T01
+- Command: `dotnet test tests/ContentFactory.IntegrationTests --filter SchemaTests`
+  - RED (before migration): total 5, failed 5. PostgreSQL error `42P01` (missing
+    `app.owner_users` / `app.jobs`), i.e. the failure was the absent schema, not the
+    environment.
+  - GREEN: total 6, passed 6, failed 0, skipped 0 (includes migration re-run).
+  - Environment: PostgreSQL 18 in Docker at `127.0.0.1:54329`, test DB `cf_test_<runid>`.
+- Command: `make test-unit` → 9 passed, 0 failed, 0 skipped.
+- Command: `make test-integration` → 6 passed, 0 failed, 0 skipped.
+- Command: `make migrate` (new app DB) → applied `InitialSchema`, done.
+- Command: `make migrate` (already migrated) → "No migrations were applied. The
+  database is already up to date." Done.
+- Command: `dotnet ef migrations has-pending-model-changes` → "No changes have been
+  made to the model since the last migration."
+
 ## Files changed
+
+### T01
+Created: `src/ContentFactory.Contracts/*` (C4 DTOs, enums and `JsonDefaults`),
+`src/ContentFactory.Core/Abstractions/*` (C4 interfaces),
+`src/ContentFactory.Infrastructure/Persistence/AppDbContext.cs`,
+`Persistence/Entities/*`, `Persistence/DesignTimeDbContextFactory.cs`,
+`Persistence/Migrations/20261020144646_InitialSchema*`, `infra/compose.yaml`,
+`infra/postgres/init-test-db.sql`, `.config/dotnet-tools.json`, `.env.test.example`,
+`tests/ContentFactory.UnitTests/ContractSerializationTests.cs`,
+`tests/ContentFactory.IntegrationTests/Infrastructure/PostgresTestDatabase.cs`,
+`tests/ContentFactory.IntegrationTests/Infrastructure/PostgresSchemaFixture.cs`,
+`tests/ContentFactory.IntegrationTests/SchemaTests.cs`.
+Modified: `Directory.Packages.props` (transitive pinning), project files (EF/Npgsql
+references), `Makefile` (infra-up/down, migrate, dotnet path), `docs/decisions.md`.
+
+Notes: the compose volume mounts `/var/lib/postgresql` because the PostgreSQL 18 image
+rejects a mount at `/var/lib/postgresql/data`; this was an infrastructure fix, not a
+schema change. `DateTimeOffset` values are normalised to UTC at the EF boundary because
+Npgsql accepts only UTC offsets for `timestamptz`.
 
 ### T00
 Created: `.env.example`, `.node-version`, `global.json`, `Directory.Build.props`,
@@ -56,9 +90,9 @@ it was not moved or rewritten.
 - Disabled; no paid requests authorized and none made.
 
 ## Next exact task
-- Task ID: T01 — Shared contracts and PostgreSQL schema
-- Inputs/files to read: plan C1–C4, T01, `docs/decisions.md`
-- First failing tests: `SchemaTests` — `DuplicateDedupeKeyRejected`,
-  `MoneyRoundTripsSixDecimals`, `InvalidCommissionRateRejected`,
-  `TimestampRetainsInstant`
-- Prerequisite: PostgreSQL reachable on `127.0.0.1:54329`; `CF_TEST_POSTGRES` set.
+- Task ID: T02 — Local owner authentication and secret isolation
+- Inputs/files to read: plan E1, I6, C5 auth routes, T02
+- First failing tests: `AuthenticationTests` — `AnonymousMutationReturns401`,
+  `MissingCsrfRejected`, `ForeignOriginRejected`, `InvalidHostRejected`,
+  `SecretsNeverAppearInLogs`
+- Prerequisite: T01 schema; PostgreSQL reachable; no FFmpeg needed.
