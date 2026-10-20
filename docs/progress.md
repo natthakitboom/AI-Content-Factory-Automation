@@ -12,7 +12,7 @@ M1 — T06–T12 (T06 complete; T07 next)
 | T03 | done | 3363b61 | `make build` → 0 warnings/0 errors; `make test-unit` → 18 passed; `make test-integration` → 23 passed; filters `AssetPathTests` → 7, `AssetIngestTests` → 8 | None for T03; media/live gates remain blocked (FFmpeg, LM Studio, Node 24) |
 | T04 | done | 52c61eb | `make build` → 0 warnings/0 errors; `make test-unit` → 31 passed; filter `SafeProcessTests|ManifestHashTests` → 13 passed; `make test-integration` → 23 passed | No FFmpeg needed; media/live gates remain blocked |
 | T05 | done | 5b8c780 | `make build` → 0 warnings/0 errors; `make test-unit` → 31 passed; filtered `CampaignRunTests` → 5 passed; `make test-integration` → 28 passed | M0 gate reached; media/live gates still blocked (FFmpeg, LM Studio, Node 24) |
-| T06 | done | pending | `make build` → 0 warnings/0 errors; `make test-unit` → 31 passed; filtered `JobLeasingTests` → 7 passed; `make test-integration` → 35 passed; 100-job two-worker finalization test passed | No FFmpeg/LM Studio needed; provider uncertainty is blocked for reconciliation, not retried |
+| T06 | done | d68ad34 | `make build` → 0 warnings/0 errors; `make test-unit` → 31 passed; filtered `JobLeasingTests` → 7 passed; `make test-integration` → 35 passed; 100-job two-worker finalization test passed | No FFmpeg/LM Studio needed; provider uncertainty is blocked for reconciliation, not retried |
 
 ## Last verified commands
 
