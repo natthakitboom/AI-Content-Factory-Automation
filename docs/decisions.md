@@ -54,3 +54,18 @@ this file explains local choices and their consequences.
   Product prices and commissions retain their source currency.
 - Consequences: no floating-point money anywhere; currency mixing without an exchange
   rate and date is rejected.
+
+## ADR-0006 — Rights attestation gates production and cloud use
+
+- Date: 2026-10-20
+- Status: accepted
+- Context: a content hash proves identity, not permission. A product image copied from a
+  marketplace or found online cannot be treated as licensed for advertising, and cloud
+  upload needs an explicit consent decision.
+- Decision: `rights_status` is `unknown` by default. `owner_attested` requires a non-empty
+  `source_reference` (at most 1024 characters); `rejected` blocks production. Attaching an
+  upload to a product (`POST /products/{id}/assets`) and setting `cloud_use_allowed=true`
+  both require an owner attestation. Re-uploading identical bytes never resets an existing
+  attestation to `unknown`.
+- Consequences: generated or imported assets can still be staged with unknown rights, but
+  they cannot enter a production run or a cloud call until the owner attests them.

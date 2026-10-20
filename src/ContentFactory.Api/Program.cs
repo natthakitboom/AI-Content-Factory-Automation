@@ -1,12 +1,16 @@
 using System.Security.Claims;
 using ContentFactory.Api.Endpoints;
 using ContentFactory.Api.Middleware;
+using ContentFactory.Contracts;
+using ContentFactory.Core.Abstractions;
 using ContentFactory.Infrastructure.Persistence;
 using ContentFactory.Infrastructure.Persistence.Entities;
 using ContentFactory.Infrastructure.Security;
+using ContentFactory.Infrastructure.Storage;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,8 +24,25 @@ if (string.IsNullOrWhiteSpace(connectionString))
     connectionString = DatabaseConnection.FromEnvironment();
 }
 
+var storageOptions = StorageOptions.Create(builder.Configuration["DATA_ROOT"]);
+var maxUploadBytes = StorageOptions.MaxVideoBytes + (1024 * 1024);
+
+builder.Services.ConfigureHttpJsonOptions(options => JsonDefaults.Configure(options.SerializerOptions));
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = maxUploadBytes;
+});
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = maxUploadBytes;
+});
+
 builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton(storageOptions);
+builder.Services.AddScoped<FileSystemAssetStore>();
+builder.Services.AddScoped<IAssetStore>(services => services.GetRequiredService<FileSystemAssetStore>());
+builder.Services.AddScoped<AssetIngestService>();
 builder.Services.AddSingleton<LoginThrottle>();
 builder.Services.AddSingleton<IPasswordHasher<OwnerUser>, PasswordHasher<OwnerUser>>();
 builder.Services.AddSingleton(new SecretRedactor(
@@ -88,6 +109,7 @@ var app = builder.Build();
 
 app.UseMiddleware<LocalRequestGuard>();
 app.UseMiddleware<RequestLoggingMiddleware>();
+app.UseMiddleware<ExceptionMappingMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<CsrfMiddleware>();
@@ -102,6 +124,7 @@ app.MapGet("/health/ready", async (AppDbContext db, CancellationToken ct) =>
 }).AllowAnonymous();
 
 app.MapAuthEndpoints();
+app.MapAssetEndpoints();
 
 app.Run();
 

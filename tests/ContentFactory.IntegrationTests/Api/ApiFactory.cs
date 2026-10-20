@@ -9,11 +9,13 @@ namespace ContentFactory.IntegrationTests.Api;
 public sealed class ApiFactory : WebApplicationFactory<Program>
 {
     private readonly string _connectionString;
+    private readonly string _dataRoot;
     private readonly CapturingLoggerProvider _logs;
 
-    public ApiFactory(string connectionString, CapturingLoggerProvider logs)
+    public ApiFactory(string connectionString, string dataRoot, CapturingLoggerProvider logs)
     {
         _connectionString = connectionString;
+        _dataRoot = dataRoot;
         _logs = logs;
     }
 
@@ -21,6 +23,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
     {
         builder.UseEnvironment("Testing");
         builder.UseSetting("ConnectionStrings:App", _connectionString);
+        builder.UseSetting("DATA_ROOT", _dataRoot);
         builder.ConfigureTestServices(services =>
         {
             services.AddSingleton<ILoggerProvider>(_logs);

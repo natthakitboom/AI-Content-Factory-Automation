@@ -7,9 +7,9 @@ M0 — T00–T05
 | Task | Status | Commit | Evidence | Blocker |
 |---|---|---|---|---|
 | T00 | done | 1ee6bfa | `dotnet test tests/ContentFactory.UnitTests --filter RepositoryBootstrapTests` → 7 passed; `scripts/doctor.sh` → exit 2 | Node 24 pin not installed, FFmpeg/FFprobe missing, port 3000 busy (media/live gates blocked) |
-| T01 | done | pending | `make test-unit` → 9 passed; `make test-integration` → 6 passed; `make migrate` twice → second run no-op | PostgreSQL in Docker on loopback; test DBs are `cf_test_<runid>` and dropped |
-| T02 | done | pending | `make test-unit` → 11 passed; `make test-integration` → 15 passed (8 auth + 1 CLI + 6 schema) | Dashboard proxy not built in M0; deferred with UI tasks |
-| T03 | not_started | - | - | - |
+| T01 | done | 9fb596d | `make test-unit` → 9 passed; `make test-integration` → 6 passed; `make migrate` twice → second run no-op | PostgreSQL in Docker on loopback; test DBs are `cf_test_<runid>` and dropped |
+| T02 | done | d29c3b1 | `make test-unit` → 11 passed; `make test-integration` → 15 passed (8 auth + 1 CLI + 6 schema) | Dashboard proxy not built in M0; deferred with UI tasks |
+| T03 | done | pending | `make build` → 0 warnings/0 errors; `make test-unit` → 18 passed; `make test-integration` → 23 passed; filters `AssetPathTests` → 7, `AssetIngestTests` → 8 | None for T03; media/live gates remain blocked (FFmpeg, LM Studio, Node 24) |
 | T04 | not_started | - | - | - |
 | T05 | not_started | - | - | - |
 
@@ -52,7 +52,57 @@ M0 — T00–T05
 - Notes: no interactive `make owner-init` run was claimed. The CLI hashing path is
   exercised by `InitOwnerCommandTests` against the test database.
 
+### T03
+- Command: `make test-unit` (before implementation)
+  - RED: build failed with `CS0103: The name 'AssetUploadPolicy' does not exist` at
+    `AssetPathTests.cs:131` and `:132`, i.e. the test contract existed but the upload
+    guard did not.
+- Command: `make test-integration` (before implementation)
+  - RED: build failed with `CS1061: ApiTestFixture does not contain DataRoot` and
+    `CS0246: FileSystemAssetStore could not be found`, i.e. the API/fixture surface for
+    asset ingest was absent.
+- Command: `make test-unit` → 18 passed, 0 failed, 0 skipped.
+- Command: `make test-integration` → 23 passed, 0 failed, 0 skipped
+  (8 asset ingest, 8 auth, 1 CLI, 6 schema).
+- Command: `dotnet test tests/ContentFactory.UnitTests --filter "FullyQualifiedName~AssetPathTests"`
+  → 7 passed, 0 failed, 0 skipped.
+- Command: `dotnet test tests/ContentFactory.IntegrationTests --filter "FullyQualifiedName~AssetIngestTests"`
+  → 8 passed, 0 failed, 0 skipped (with `CF_TEST_POSTGRES` from `.env.test.local`).
+- Command: `make build` → 0 warnings, 0 errors.
+- Environment: macOS arm64, .NET SDK 10.0.402 (user-local), PostgreSQL 18 in Docker at
+  `127.0.0.1:54329`, `cf_test_<runid>` databases, temporary per-fixture `DATA_ROOT`.
+- Notes: no paid API, cloud upload or network AI call was made. The content endpoint is
+  authenticated and has no public URL. Rights are metadata, not part of the hash.
+
 ## Files changed
+
+### T03
+Created: `src/ContentFactory.Core/Assets/AssetRightsPolicy.cs`,
+`src/ContentFactory.Core/Exceptions/NotFoundException.cs`,
+`src/ContentFactory.Infrastructure/Storage/AssetUploadPolicy.cs`,
+`Storage/FileSystemAssetStore.cs`, `Storage/AssetIngestService.cs`,
+`src/ContentFactory.Api/Endpoints/AssetEndpoints.cs`,
+`src/ContentFactory.Api/Middleware/ExceptionMappingMiddleware.cs`,
+`tests/ContentFactory.UnitTests/AssetPathTests.cs`,
+`tests/ContentFactory.IntegrationTests/AssetIngestTests.cs`.
+Completed/committed uncommitted T03 helpers: `src/ContentFactory.Core/Exceptions/ValidationException.cs`,
+`src/ContentFactory.Infrastructure/Storage/StorageOptions.cs`, `AssetPathResolver.cs`,
+`MimeSniffer.cs`.
+Modified: `src/ContentFactory.Api/Program.cs` (JSON defaults, storage DI, upload caps,
+exception mapping, asset routes), `src/ContentFactory.Contracts/JsonDefaults.cs`
+(shared `Configure`), `tests/ContentFactory.IntegrationTests/Api/ApiFactory.cs` and
+`Api/ApiTestFixture.cs` (isolated `DATA_ROOT`), `docs/decisions.md`.
+
+Notes: product asset upload requires `rightsStatus=owner_attested` plus a source
+reference; `unknown` and `rejected` are stored but cannot be used for production or
+cloud consent. Ingest streams to `DATA_ROOT/temp`, hashes while writing, fsyncs and
+atomically renames into `assets/sha256/<first-2>/<hash>.<ext>`. The original filename is
+never used as a path. The API test uses Thai text, spaces, a single quote and a semicolon
+in the filename; the double-quote case is covered by the unit policy test because the
+.NET multipart client library rejects a raw double quote in the `Content-Disposition`
+parameter before the request is sent. Range previews return 206 with `Content-Range`,
+and invalid ranges return 416. Cleanup enumerates only `DATA_ROOT/temp`, so a referenced
+asset cannot be deleted by temp cleanup.
 
 ### T02
 Created: `src/ContentFactory.Infrastructure/Security/SecretRedactor.cs`,
@@ -108,16 +158,21 @@ it was not moved or rewritten.
 - ADR-0003: integration tests require real PostgreSQL via `CF_TEST_POSTGRES`.
 - ADR-0004: content-addressed assets; rights stored separately.
 - ADR-0005: `decimal`/`numeric(18,6)` money and `timestamptz` instants.
+- ADR-0006: production/cloud use requires an owner rights attestation with a source
+  reference; rights status is `unknown` by default.
 - No plan-level architecture change.
 
 ## Paid API activity
 - Disabled; no paid requests authorized and none made.
 
 ## Next exact task
-- Task ID: T03 — Asset ingest, rights and content-addressed storage
-- Inputs/files to read: plan E1, C2 assets, C4 IAssetStore, T03
-- First failing tests: `AssetPathTests` and `AssetIngestTests` —
-  `TraversalAndSymlinkEscapeRejected`, `ThaiFilenameDoesNotBecomeDiskPath`,
-  `SvgDisguisedAsJpegRejected`, `OversizedUploadRejected`,
-  `RightsRequiredForProduction`
-- Prerequisite: T01/T02; PostgreSQL reachable; no FFmpeg needed.
+- Task ID: T04 — Safe process runner and manifest identity
+- Inputs/files to read: plan C4 render contracts, E1 security, T04
+- First failing tests: `SafeProcessTests` and `ManifestHashTests` —
+  `ShellMetacharactersRemainArguments`, `CancellationStopsChildProcess`,
+  `SameManifestHasSameHash`, `ChangedCaptionChangesHash`,
+  `KeyOrderDoesNotChangeHash`
+- Command: `dotnet test tests/ContentFactory.UnitTests --filter
+  "FullyQualifiedName~SafeProcessTests|FullyQualifiedName~ManifestHashTests"`
+- Prerequisite: T00/T03; no FFmpeg needed. Use `ArgumentList`, no shell, an executable
+  allowlist, cancellation/timeout and capped output logs.

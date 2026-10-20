@@ -16,12 +16,21 @@ public sealed class ApiTestFixture : IAsyncLifetime
     public const string TestSecret = "super-secret-value-123";
 
     private PostgresTestDatabase? _database;
+    private string? _dataRoot;
 
     public ApiFactory Factory { get; private set; } = null!;
     public CapturingLoggerProvider Logs { get; } = new();
+    public string DataRoot => _dataRoot
+        ?? throw new InvalidOperationException("ApiTestFixture is not initialized.");
 
     public async Task InitializeAsync()
     {
+        _dataRoot = Path.Combine(
+            Path.GetTempPath(),
+            "contentfactory-tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_dataRoot);
+
         _database = await PostgresTestDatabase.CreateAsync();
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseNpgsql(_database.ConnectionString)
@@ -32,7 +41,7 @@ public sealed class ApiTestFixture : IAsyncLifetime
             await db.Database.MigrateAsync();
         }
 
-        Factory = new ApiFactory(_database.ConnectionString, Logs);
+        Factory = new ApiFactory(_database.ConnectionString, _dataRoot, Logs);
 
         using var scope = Factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -91,6 +100,18 @@ public sealed class ApiTestFixture : IAsyncLifetime
         if (_database is not null)
         {
             await _database.DisposeAsync();
+        }
+
+        if (_dataRoot is not null)
+        {
+            try
+            {
+                Directory.Delete(_dataRoot, recursive: true);
+            }
+            catch (IOException)
+            {
+                // Best-effort cleanup of a test sandbox.
+            }
         }
     }
 }
