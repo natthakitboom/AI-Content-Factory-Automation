@@ -35,6 +35,33 @@ public sealed class PlannerAdapterTests
         Assert.Equal(10, result.Trace.PromptTokens);
         Assert.Equal(20, result.Trace.CompletionTokens);
         Assert.Equal(request.RevisionId, result.Script.RevisionId);
+        Assert.False(body.RootElement.TryGetProperty("reasoning_effort", out _));
+
+        var responseFormat = body.RootElement.GetProperty("response_format");
+        Assert.Equal("json_schema", responseFormat.GetProperty("type").GetString());
+        var jsonSchema = responseFormat.GetProperty("json_schema");
+        Assert.Equal("script_document_v1", jsonSchema.GetProperty("name").GetString());
+        Assert.True(jsonSchema.GetProperty("strict").GetBoolean());
+        Assert.Equal(3, jsonSchema.GetProperty("schema")
+            .GetProperty("properties")
+            .GetProperty("scenes")
+            .GetProperty("minItems")
+            .GetInt32());
+    }
+
+    [Fact]
+    public async Task ReasoningEffortNoneIsSent()
+    {
+        var request = CreateRequest();
+        var handler = new RecordingHandler((_, _, _) =>
+            Task.FromResult(ChatResponse(SerializeDocument(CreateDocument(request)))));
+        using var http = new HttpClient(handler, disposeHandler: false);
+        var planner = CreatePlanner(http, "local-test-model", reasoningEffort: "none");
+
+        await planner.GenerateAsync(request, CancellationToken.None);
+
+        using var body = JsonDocument.Parse(handler.Requests.Single().Body);
+        Assert.Equal("none", body.RootElement.GetProperty("reasoning_effort").GetString());
     }
 
     [Fact]
@@ -312,7 +339,8 @@ public sealed class PlannerAdapterTests
         HttpClient http,
         string modelId,
         string? token = null,
-        TimeSpan? timeout = null)
+        TimeSpan? timeout = null,
+        string? reasoningEffort = null)
         => new(
             http,
             new LmStudioOptions
@@ -320,6 +348,7 @@ public sealed class PlannerAdapterTests
                 BaseUrl = LoopbackBaseUrl,
                 ModelId = modelId,
                 ApiToken = token,
+                ReasoningEffort = reasoningEffort,
                 Timeout = timeout ?? TimeSpan.FromSeconds(5)
             },
             new ScriptValidator());

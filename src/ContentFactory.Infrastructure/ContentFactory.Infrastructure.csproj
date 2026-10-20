@@ -15,6 +15,9 @@
     <EmbeddedResource Include="..\..\media\prompts\script-planner.v1.txt"
                       Link="Providers\LmStudio\script-planner.v1.txt"
                       LogicalName="ContentFactory.Infrastructure.Providers.LmStudio.script-planner.v1.txt" />
+    <EmbeddedResource Include="..\..\media\schemas\script-document.v1.schema.json"
+                      Link="Providers\LmStudio\script-document.v1.schema.json"
+                      LogicalName="ContentFactory.Infrastructure.Providers.LmStudio.script-document.v1.schema.json" />
   </ItemGroup>
 
   <ItemGroup>

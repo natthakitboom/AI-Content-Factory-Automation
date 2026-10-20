@@ -168,9 +168,12 @@ this file explains local choices and their consequences.
   configuration and are never guessed or downloaded. The system prompt is a fixed embedded
   resource. Product facts and the request are serialised into a separate user message
   explicitly marked as untrusted data, so text inside them cannot change the instructions.
-  Requests go to `/v1/chat/completions` with `response_format=json_object`; no tools, MCP
-  definitions or client secrets are sent in the body. A configured local token is sent only
-  as an `Authorization` header. The response content may be an object or a JSON string.
+  Requests go to `/v1/chat/completions` with a JSON Schema `response_format` built from the
+  embedded `script-document.v1.schema.json`; no tools, MCP definitions or client secrets are
+  sent in the body. A configured local token is sent only as an `Authorization` header.
+  `LM_STUDIO_REASONING_EFFORT` is optional and is sent only when configured; `none` disables
+  Qwen3.6 thinking on LM Studio's OpenAI-compatible endpoint so output tokens and heat are not
+  spent on hidden reasoning. The response content may be an object or a JSON string.
   Parsing rejects unmapped fields, then `ScriptValidator` enforces schemaVersion 1, 3–6
   scenes, unique scene IDs, allowed roles, known claim IDs, claims on benefit/demo scenes,
   known preferred assets, at most one motion scene, and plain text narration/caption.
@@ -181,5 +184,7 @@ this file explains local choices and their consequences.
   the adapter exposes the configured prompt version, model ID and any token usage in a
   `ScriptPlanTrace` without inventing values. The plan schema has no token-usage column, so
   no migration was added; a later plan-script handler can persist the available trace when
-  it writes the revision. A live LM Studio smoke test remains an environmental blocker and
-  is not claimed as passed.
+  it writes the revision. A live loopback smoke test was run on 2026-10-20 against LM Studio
+  with `qwen/qwen3.6-35b-a3b:2`; both runs produced validator-approved scripts, including one
+  run that used the single allowed repair. Live LM Studio remains an optional local gate, not
+  a CI dependency.

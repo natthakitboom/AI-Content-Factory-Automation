@@ -19,11 +19,23 @@ public sealed class LmStudioScriptPlanner : IScriptPlanner
 {
     private const string PromptResourceName =
         "ContentFactory.Infrastructure.Providers.LmStudio.script-planner.v1.txt";
+    private const string SchemaResourceName =
+        "ContentFactory.Infrastructure.Providers.LmStudio.script-document.v1.schema.json";
     private const int MaxRepairRequests = 1;
     private const int MaxRepairContextLength = 8000;
 
+    private static readonly HashSet<string> AllowedReasoningEfforts =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "none", "minimal", "low", "medium", "high"
+        };
+
     private static readonly Lazy<string> SystemPrompt = new(
         LoadPrompt,
+        LazyThreadSafetyMode.ExecutionAndPublication);
+
+    private static readonly Lazy<JsonElement> ScriptSchema = new(
+        LoadSchema,
         LazyThreadSafetyMode.ExecutionAndPublication);
 
     private static readonly JsonSerializerOptions ScriptJsonOptions = CreateScriptJsonOptions();
@@ -156,6 +168,14 @@ public sealed class LmStudioScriptPlanner : IScriptPlanner
             throw new ScriptPlanningException(
                 "LOCAL_MODEL_CONFIG_INVALID",
                 "The configured prompt version does not match the bundled script prompt.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(_options.ReasoningEffort) &&
+            !AllowedReasoningEfforts.Contains(_options.ReasoningEffort))
+        {
+            throw new ScriptPlanningException(
+                "LOCAL_MODEL_CONFIG_INVALID",
+                "LM_STUDIO_REASONING_EFFORT must be none, minimal, low, medium or high.");
         }
 
         if (_options.MaxOutputTokens is < 1 or > 32768)
@@ -489,11 +509,22 @@ public sealed class LmStudioScriptPlanner : IScriptPlanner
             ["temperature"] = _options.Temperature,
             ["max_tokens"] = _options.MaxOutputTokens,
             ["stream"] = false,
-            ["response_format"] = new Dictionary<string, string>
+            ["response_format"] = new Dictionary<string, object?>
             {
-                ["type"] = "json_object"
+                ["type"] = "json_schema",
+                ["json_schema"] = new Dictionary<string, object?>
+                {
+                    ["name"] = "script_document_v1",
+                    ["strict"] = true,
+                    ["schema"] = ScriptSchema.Value
+                }
             }
         };
+
+        if (!string.IsNullOrWhiteSpace(_options.ReasoningEffort))
+        {
+            payload["reasoning_effort"] = _options.ReasoningEffort;
+        }
 
         return JsonSerializer.Serialize(payload, JsonDefaults.Options);
     }
@@ -586,6 +617,20 @@ public sealed class LmStudioScriptPlanner : IScriptPlanner
 
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
+    }
+
+    private static JsonElement LoadSchema()
+    {
+        using var stream = typeof(LmStudioScriptPlanner).Assembly
+            .GetManifestResourceStream(SchemaResourceName);
+        if (stream is null)
+        {
+            throw new InvalidOperationException(
+                "The embedded script document schema is missing from the build.");
+        }
+
+        using var document = JsonDocument.Parse(stream);
+        return document.RootElement.Clone();
     }
 
     private sealed record ChatExchange(
