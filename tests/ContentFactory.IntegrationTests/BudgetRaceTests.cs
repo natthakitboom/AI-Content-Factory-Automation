@@ -317,7 +317,7 @@ public sealed class BudgetRaceTests : IAsyncLifetime
     public async Task ApprovalExpiresDuringBatch()
     {
         await ResetBudgetStateAsync();
-        var t0 = new DateTimeOffset(2026, 10, 20, 17, 30, 0, TimeSpan.Zero);
+        var t0 = DateTimeOffset.UtcNow;
         var clock = new ManualTimeProvider(t0);
         var campaignId = await SeedCampaignAsync(10.00m);
         var price = await SeedPriceAsync(unitPriceUsd: 0.10m);
