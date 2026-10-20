@@ -1,7 +1,7 @@
 # Development progress
 
 ## Current milestone
-M1 — T06–T12 (T06 complete; T07 next)
+M1 — T06–T12 (T07 complete; T08 next)
 
 ## Task status
 | Task | Status | Commit | Evidence | Blocker |
@@ -13,6 +13,7 @@ M1 — T06–T12 (T06 complete; T07 next)
 | T04 | done | 52c61eb | `make build` → 0 warnings/0 errors; `make test-unit` → 31 passed; filter `SafeProcessTests|ManifestHashTests` → 13 passed; `make test-integration` → 23 passed | No FFmpeg needed; media/live gates remain blocked |
 | T05 | done | 5b8c780 | `make build` → 0 warnings/0 errors; `make test-unit` → 31 passed; filtered `CampaignRunTests` → 5 passed; `make test-integration` → 28 passed | M0 gate reached; media/live gates still blocked (FFmpeg, LM Studio, Node 24) |
 | T06 | done | d68ad34 | `make build` → 0 warnings/0 errors; `make test-unit` → 31 passed; filtered `JobLeasingTests` → 7 passed; `make test-integration` → 35 passed; 100-job two-worker finalization test passed | No FFmpeg/LM Studio needed; provider uncertainty is blocked for reconciliation, not retried |
+| T07 | done | pending | `make build` → 0 warnings/0 errors; `make test-unit` → 37 passed; filtered `WorkflowTests` → 6 passed; `make test-integration` → 40 passed; filtered `WorkerRecoveryTests` → 5 passed; no pending model changes | No FFmpeg/LM Studio needed; no provider calls; pause does not cancel running cloud work |
 
 ## Last verified commands
 
@@ -183,6 +184,52 @@ snapshot, claim text or price is accepted as fact.
   `submission_unknown` provider request was blocked, not returned to the queue. No provider
   API was called and no exactly-once guarantee is claimed beyond the tested DB invariants.
 
+### T07
+- Command: `dotnet test tests/ContentFactory.UnitTests --filter WorkflowTests`
+  (before implementation)
+  - RED: build failed with `CS0234: The type or namespace name 'Jobs' does not exist in
+    the namespace 'ContentFactory.Core'` and `CS0234: ... 'Health' does not exist in the
+    namespace 'ContentFactory.Worker'`. The tests described the workflow graph and lane
+    limits, but those types did not exist.
+- Command: `dotnet test tests/ContentFactory.IntegrationTests --filter WorkerRecoveryTests`
+  (before implementation)
+  - RED: build failed with `CS0234` for `ContentFactory.Core.Jobs`,
+    `ContentFactory.Worker.Handlers` and `ContentFactory.Worker.Health`. The failures were
+    missing implementation, not a database or environment fault.
+- Command: `dotnet test tests/ContentFactory.UnitTests --filter WorkflowTests`
+  → 6 passed, 0 failed, 0 skipped:
+  `TemplateModeSkipsCloudStages`, `OrderedStagesMatchTheApprovedPipeline`,
+  `HeavyLocalLaneIsSerialized`, `CloudWaitingDoesNotHoldHeavyLocalSlot`,
+  `ResourceSensorsReportUnavailableInsteadOfGuessing`, `QuietModeOptionsAreExplicit`.
+- Command: `dotnet test tests/ContentFactory.IntegrationTests --filter WorkerRecoveryTests`
+  → 5 passed, 0 failed, 0 skipped: `PausePreventsNewHeavyWork`,
+  `SleepRecoveryDoesNotFanOut`, `LostLeaseCancelsLocalProcess`,
+  `GracefulShutdownStopsNewLeasesAndCancelsLocalProcess`,
+  `PollRescheduleDoesNotConsumeRetryLimit`.
+- Command: `make test-unit` → 37 passed, 0 failed, 0 skipped.
+- Command: `make test-integration` → 40 passed, 0 failed, 0 skipped (5 worker recovery,
+  7 job leasing, 5 campaign run, 8 asset ingest, 8 auth, 1 CLI, 6 schema).
+- Command: `make build` → 0 warnings, 0 errors.
+- Command: `dotnet ef migrations has-pending-model-changes --project
+  src/ContentFactory.Infrastructure --startup-project src/ContentFactory.Api`
+  → "No changes have been made to the model since the last migration."
+- Environment: macOS arm64, .NET SDK 10.0.402 (user-local), PostgreSQL 18 in Docker at
+  `127.0.0.1:54329`, `cf_test_<runid>` databases, temporary per-fixture `DATA_ROOT`.
+  Verified 2026-10-20T15:41:54Z.
+- Notes: the D1 graph is code-defined in `WorkflowDefinition`; template-only mode has no
+  cloud-submit stage and records the skipped cloud stages as `notRequiredStages` in the
+  stage outbox payload, never as fake provider successes. A successful stage finalizes its
+  job and inserts the child event in one PostgreSQL transaction. Replaying that event after
+  a simulated worker sleep created exactly one child. Lease loss advanced a manual clock
+  past the lease, the heartbeat rejected renewal, and `JobDispatcher` cancelled a real
+  `/bin/sh` child; the process id was gone and the job was not finalized. Host cancellation
+  stopped new leases and cancelled the same local process. A cloud poll `retry_wait` left
+  the failure budget unchanged while keeping attempt numbers monotonic. Pause moved only
+  queued/retry-wait `heavy_local` and `cloud_submit` jobs to `paused`; a running cloud poll
+  kept its owner and lease. Heavy-local concurrency was 1 under quiet mode and a held cloud
+  permit did not block the heavy-local lane. No provider API was called and no
+  exactly-once provider guarantee is claimed.
+
 ### T06
 Created: `src/ContentFactory.Infrastructure/Jobs/PostgresJobStore.cs`,
 `Jobs/OutboxDispatcher.cs`, `Jobs/LeaseWatchdog.cs`,
@@ -203,6 +250,29 @@ transaction. The new partial index is `(lane, priority, run_after, created_at) W
 IN ('queued', 'retry_wait')`.
 
 ## Files changed
+
+### T07
+Created: `src/ContentFactory.Core/Jobs/WorkflowDefinition.cs`,
+`src/ContentFactory.Core/Abstractions/IJobOutboxWriter.cs`,
+`src/ContentFactory.Worker/JobDispatcher.cs`,
+`src/ContentFactory.Worker/Handlers/WorkflowOutboxHandler.cs`,
+`src/ContentFactory.Worker/Health/ResourceGovernor.cs`,
+`src/ContentFactory.Api/Endpoints/SystemEndpoints.cs`,
+`tests/ContentFactory.UnitTests/WorkflowTests.cs`,
+`tests/ContentFactory.IntegrationTests/WorkerRecoveryTests.cs`.
+Modified: `src/ContentFactory.Worker/Program.cs` and `Worker.cs` (scoped dispatcher,
+lane loop, watchdog, outbox dispatch, 30-second shutdown), `src/ContentFactory.Api/Program.cs`
+(pause/resume endpoints and job store DI),
+`src/ContentFactory.Infrastructure/Jobs/PostgresJobStore.cs`
+(`FinishWithOutboxAsync`, monotonic attempt numbering, poll reschedule reset,
+pause/resume), `tests/ContentFactory.UnitTests/ContentFactory.UnitTests.csproj` and
+`tests/ContentFactory.IntegrationTests/ContentFactory.IntegrationTests.csproj` (Worker
+project reference), `docs/decisions.md` (ADR-0010), `docs/progress.md`.
+
+Notes: no schema/model change was needed. Pause/resume reuses the existing job status
+column. The API endpoints are authenticated and mutations remain CSRF-protected. The
+worker has no provider handler registered yet, so no paid or network AI call can occur in
+this task.
 
 ### T04
 Created: `src/ContentFactory.Infrastructure/Media/SafeProcessRunner.cs`,
@@ -306,20 +376,24 @@ it was not moved or rewritten.
   inside the job row; client snapshots and prices are never trusted.
 - ADR-0009: lease claims use `SKIP LOCKED` plus a monotonic fence; outbox replay is
   deduplicated by event id, and uncertain provider work is blocked for reconciliation.
+- ADR-0010: the D1 stage graph is code-defined; lease loss cancels local work, finalize
+  and child-event insertion share one transaction, and pause/resume withholds only new
+  heavy/paid work without cancelling running cloud requests.
 - No plan-level architecture change.
 
 ## Paid API activity
 - Disabled; no paid requests authorized and none made.
 
 ## Next exact task
-- Task ID: T07 — Worker orchestration, pause/resume and resource lanes
-- Inputs/files to read: plan C3, D1, D2, T07; `IJobStore`, `IJobHandler`,
-  `PostgresJobStore`, `LeaseWatchdog`, `RunEnqueuer`, and the Worker project.
-- First failing tests: `WorkflowTests` — `TemplateModeSkipsCloudStages`,
-  `PausePreventsNewHeavyWork`, `SleepRecoveryDoesNotFanOut`,
-  `LostLeaseCancelsLocalProcess`, `PollRescheduleDoesNotConsumeRetryLimit`; and
-  `WorkerRecoveryTests` against real PostgreSQL.
-- Prerequisite: T06. Keep the workflow DAG code-defined, do not let an LLM choose stages.
-  A graceful shutdown must stop new leases and cancel local processes within 30 seconds.
+- Task ID: T08 — LM Studio script planner and strict validation
+- Inputs/files to read: plan D2 and T08; `ScriptRequest`, `ScriptDocument`,
+  `IScriptPlanner`, `IScriptValidator`, `ApprovedClaim`, and the T07 workflow/outbox path.
+- First failing tests: `ScriptValidationTests` — `UnknownClaimIdRejected`,
+  `PromptInjectionTreatedAsData`, `DuplicateSceneIdsRejected`,
+  `MalformedJsonRepairedAtMostOnce`, `LocalModelUnavailableReturnsBlocked`; and planner
+  adapter tests against a fake local HTTP endpoint.
+- Prerequisite: T04, T05, T07. Keep `TEXT_PROVIDER=mock` by default, send product facts as
+  untrusted data separate from instructions, and never fall back to a paid provider.
 - Remaining blockers: FFmpeg/FFprobe missing, LM Studio unreachable, Node 26.11.1 vs
-  pinned 24.22.0, and port 3000 occupied.
+  pinned 24.22.0, and port 3000 occupied. T08 may be implemented against a fake HTTP
+  endpoint without LM Studio; a live smoke test remains blocked.

@@ -27,7 +27,7 @@ public sealed record JobLeaseOptions
 /// unexpired lease in its predicate. A stale worker therefore cannot write state or
 /// finalize a job after another worker has claimed it.
 /// </summary>
-public sealed class PostgresJobStore : IJobStore
+public sealed class PostgresJobStore : IJobStore, IJobOutboxWriter
 {
     private static readonly string[] FinishStatuses =
         ["succeeded", "retry_wait", "paused", "failed", "cancelled", "blocked"];
@@ -68,7 +68,14 @@ public sealed class PostgresJobStore : IJobStore
 
         var job = await _db.Jobs.SingleAsync(x => x.Id == id.Value, ct);
         var fence = job.Fence + 1;
-        var attemptNo = job.Attempts + 1;
+
+        // Poll reschedules reset the failure budget to zero but must still produce a
+        // monotonic attempt number for ux_job_attempts_job_attempt. Derive the number from
+        // the attempt rows rather than from the mutable failure counter.
+        var lastAttemptNo = await _db.JobAttempts
+            .Where(x => x.JobId == job.Id)
+            .MaxAsync(x => (int?)x.AttemptNo, ct) ?? 0;
+        var attemptNo = lastAttemptNo + 1;
         var leaseUntil = now.Add(_options.LeaseDuration);
 
         job.Status = "running";
@@ -129,13 +136,119 @@ public sealed class PostgresJobStore : IJobStore
         return affected == 1;
     }
 
-    public async Task<bool> FinishAsync(
+    public Task<bool> FinishAsync(
         LeasedJob job,
         JobOutcome outcome,
+        CancellationToken ct)
+        => FinishInternalAsync(job, outcome, outbox: null, ct);
+
+    public Task<bool> FinishWithOutboxAsync(
+        LeasedJob job,
+        JobOutcome outcome,
+        OutboxEventDraft outbox,
+        CancellationToken ct)
+        => FinishInternalAsync(job, outcome, outbox, ct);
+
+    /// <summary>
+    /// Pauses queued heavy-local and cloud-submit work. Running cloud requests are never
+    /// killed or refunded; only work that has not started is withheld.
+    /// </summary>
+    public async Task<int> PauseAsync(CancellationToken ct)
+    {
+        var now = _clock.GetUtcNow();
+        await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+
+        var ids = await _db.Jobs
+            .AsNoTracking()
+            .Where(x => (x.Status == "queued" || x.Status == "retry_wait")
+                && (x.Lane == JobLane.HeavyLocal || x.Lane == JobLane.CloudSubmit))
+            .Select(x => x.Id)
+            .ToListAsync(ct);
+
+        if (ids.Count == 0)
+        {
+            await transaction.RollbackAsync(ct);
+            return 0;
+        }
+
+        var idSet = ids.ToHashSet();
+        var affected = await _db.Jobs
+            .Where(x => idSet.Contains(x.Id)
+                && (x.Status == "queued" || x.Status == "retry_wait")
+                && (x.Lane == JobLane.HeavyLocal || x.Lane == JobLane.CloudSubmit))
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(x => x.Status, "paused")
+                    .SetProperty(x => x.UpdatedAt, now),
+                ct);
+
+        foreach (var id in ids)
+        {
+            _db.JobEvents.Add(NewEvent(
+                id,
+                "system_paused",
+                new { reason = "owner" },
+                now));
+        }
+
+        await _db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+        return affected;
+    }
+
+    /// <summary>
+    /// Returns owner-paused jobs to the queue. The paid-work guard and budget checks still
+    /// apply when those jobs are later claimed and executed.
+    /// </summary>
+    public async Task<int> ResumeAsync(CancellationToken ct)
+    {
+        var now = _clock.GetUtcNow();
+        await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+
+        var ids = await _db.Jobs
+            .AsNoTracking()
+            .Where(x => x.Status == "paused")
+            .Select(x => x.Id)
+            .ToListAsync(ct);
+
+        if (ids.Count == 0)
+        {
+            await transaction.RollbackAsync(ct);
+            return 0;
+        }
+
+        var idSet = ids.ToHashSet();
+        var affected = await _db.Jobs
+            .Where(x => idSet.Contains(x.Id) && x.Status == "paused")
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(x => x.Status, "queued")
+                    .SetProperty(x => x.UpdatedAt, now),
+                ct);
+
+        foreach (var id in ids)
+        {
+            _db.JobEvents.Add(NewEvent(
+                id,
+                "system_resumed",
+                new { reason = "owner" },
+                now));
+        }
+
+        await _db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+        return affected;
+    }
+
+    private async Task<bool> FinishInternalAsync(
+        LeasedJob job,
+        JobOutcome outcome,
+        OutboxEventDraft? outbox,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(job);
         ArgumentNullException.ThrowIfNull(outcome);
+        ValidateOutbox(outbox);
 
         if (!FinishStatuses.Contains(outcome.Status, StringComparer.Ordinal))
         {
@@ -153,6 +266,12 @@ public sealed class PostgresJobStore : IJobStore
 
         var now = _clock.GetUtcNow();
         await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+
+        var lane = await _db.Jobs
+            .AsNoTracking()
+            .Where(x => x.Id == job.Id)
+            .Select(x => (JobLane?)x.Lane)
+            .SingleOrDefaultAsync(ct);
 
         var affected = await _db.Jobs
             .Where(x => x.Id == job.Id
@@ -193,6 +312,23 @@ public sealed class PostgresJobStore : IJobStore
             return false;
         }
 
+        // An in-progress poll sets a next run time and does not consume the failure
+        // budget. Attempt numbers remain monotonic via the job_attempts rows.
+        if (outcome.Status == "retry_wait" && lane == JobLane.CloudPoll)
+        {
+            var reset = await _db.Jobs
+                .Where(x => x.Id == job.Id)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(x => x.Attempts, 0),
+                    ct);
+
+            if (reset != 1)
+            {
+                await transaction.RollbackAsync(ct);
+                return false;
+            }
+        }
+
         _db.JobEvents.Add(NewEvent(
             job.Id,
             "finished",
@@ -207,9 +343,55 @@ public sealed class PostgresJobStore : IJobStore
             },
             now));
 
+        if (outbox is not null)
+        {
+            _db.OutboxEvents.Add(new OutboxEvent
+            {
+                Id = Guid.NewGuid(),
+                EventType = outbox.EventType,
+                AggregateId = outbox.AggregateId,
+                PayloadJson = outbox.PayloadJson,
+                CreatedAt = now
+            });
+        }
+
         await _db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         return true;
+    }
+
+    private static void ValidateOutbox(OutboxEventDraft? outbox)
+    {
+        if (outbox is null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(outbox.EventType) || outbox.EventType.Length > 64)
+        {
+            throw new ArgumentException(
+                "An outbox event type is required and must be 64 characters or fewer.",
+                nameof(outbox));
+        }
+
+        if (outbox.AggregateId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "An outbox event needs an aggregate id.",
+                nameof(outbox));
+        }
+
+        try
+        {
+            using var _ = JsonDocument.Parse(outbox.PayloadJson);
+        }
+        catch (JsonException exception)
+        {
+            throw new ArgumentException(
+                "The outbox payload must be valid JSON.",
+                nameof(outbox),
+                exception);
+        }
     }
 
     /// <summary>

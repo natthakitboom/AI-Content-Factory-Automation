@@ -124,3 +124,33 @@ this file explains local choices and their consequences.
 - Consequences: a stale worker cannot finalize after another claim. Replaying an event
   cannot create a second downstream job. The system claims only database invariants, not
   exactly-once provider execution; uncertain provider work requires explicit reconciliation.
+
+## ADR-0010 — Code-defined resumable workflows and resource lanes
+
+- Date: 2026-10-20
+- Status: accepted
+- Context: the worker must restart without duplicating child jobs, must skip cloud stages
+  in template-only mode, must not let a waiting cloud request consume the render slot, and
+  must stop local processes when its lease is lost or the host shuts down. A pause control
+  must withhold new heavy/paid work without pretending a running provider call was refunded
+  or cancelled.
+- Decision: `WorkflowDefinition` owns the D1 order, job types, lanes and which stages need
+  cloud work. Template-only mode removes `submit_video`, `poll_video` and `download_video`
+  from the sequence; the stage outbox payload records them as `notRequiredStages` and no
+  fake provider success is written. `JobDispatcher` leases one lane at a time, renews the
+  lease on a heartbeat, and cancels the handler and its child processes when renewal fails
+  or the host stops. A successful stage finalizes the job and inserts its
+  `stage_succeeded` outbox event in the same PostgreSQL transaction; `WorkflowOutboxHandler`
+  derives exactly one next job and the existing event-id dedupe key makes replay harmless.
+  `ResourceGovernor` uses separate semaphores per lane, forces one heavy-local slot in quiet
+  mode, and exposes a database-backed count of running cloud-submit/cloud-poll jobs. Memory
+  and thermal readings are reported as unavailable rather than estimated. Pause moves only
+  queued or retry-wait `heavy_local` and `cloud_submit` jobs to `paused`; resume returns
+  them to `queued`, while running cloud work keeps its owner and lease. A cloud poll that
+  reschedules with `retry_wait` resets the failure budget; attempt numbers are derived from
+  the maximum existing `job_attempts.attempt_no` so they remain monotonic.
+- Consequences: worker restart after finalize recovers the child transition from the
+  outbox without fan-out, and stale workers cannot commit after lease loss. Pause is not a
+  refund or a provider-cancellation command, and it does not kill in-flight cloud requests.
+  The cloud in-flight count is a pre-lease gate plus an in-process semaphore, not an
+  exactly-once provider guarantee; provider reconciliation remains a separate concern.

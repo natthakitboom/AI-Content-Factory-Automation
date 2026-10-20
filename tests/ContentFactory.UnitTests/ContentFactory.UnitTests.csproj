@@ -21,6 +21,7 @@
     <ProjectReference Include="..\..\src\ContentFactory.Contracts\ContentFactory.Contracts.csproj" />
     <ProjectReference Include="..\..\src\ContentFactory.Core\ContentFactory.Core.csproj" />
     <ProjectReference Include="..\..\src\ContentFactory.Infrastructure\ContentFactory.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\ContentFactory.Worker\ContentFactory.Worker.csproj" />
     <ProjectReference Include="..\..\src\ContentFactory.Api\ContentFactory.Api.csproj" />
   </ItemGroup>
 

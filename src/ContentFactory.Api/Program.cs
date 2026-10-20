@@ -44,6 +44,10 @@ builder.Services.AddScoped<FileSystemAssetStore>();
 builder.Services.AddScoped<IAssetStore>(services => services.GetRequiredService<FileSystemAssetStore>());
 builder.Services.AddScoped<AssetIngestService>();
 builder.Services.AddScoped<ContentFactory.Infrastructure.Jobs.RunEnqueuer>();
+builder.Services.AddScoped<ContentFactory.Infrastructure.Jobs.PostgresJobStore>(services =>
+    new ContentFactory.Infrastructure.Jobs.PostgresJobStore(
+        services.GetRequiredService<AppDbContext>(),
+        services.GetRequiredService<TimeProvider>()));
 builder.Services.AddSingleton<LoginThrottle>();
 builder.Services.AddSingleton<IPasswordHasher<OwnerUser>, PasswordHasher<OwnerUser>>();
 builder.Services.AddSingleton(new SecretRedactor(
@@ -128,6 +132,7 @@ app.MapAuthEndpoints();
 app.MapProductEndpoints();
 app.MapCampaignEndpoints();
 app.MapAssetEndpoints();
+app.MapSystemEndpoints();
 
 app.Run();
 
