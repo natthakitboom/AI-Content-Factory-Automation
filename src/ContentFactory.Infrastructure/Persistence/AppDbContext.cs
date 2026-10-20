@@ -296,8 +296,8 @@ public sealed class AppDbContext : DbContext
                 .IsUnique()
                 .HasDatabaseName("ux_jobs_dedupe_key");
             entity.HasIndex(x => new { x.Lane, x.Priority, x.RunAfter, x.CreatedAt })
-                .HasDatabaseName("ix_jobs_eligible")
-                .HasFilter("status = 'queued'");
+                .HasDatabaseName("ix_jobs_claimable")
+                .HasFilter("status IN ('queued', 'retry_wait')");
             entity.HasIndex(x => new { x.Status, x.LeaseUntil })
                 .HasDatabaseName("ix_jobs_status_lease");
             entity.ToTable(t => t.HasCheckConstraint(

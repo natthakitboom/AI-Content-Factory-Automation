@@ -1,7 +1,7 @@
 # Development progress
 
 ## Current milestone
-M0 — T00–T05
+M1 — T06–T12 (T06 complete; T07 next)
 
 ## Task status
 | Task | Status | Commit | Evidence | Blocker |
@@ -12,6 +12,7 @@ M0 — T00–T05
 | T03 | done | 3363b61 | `make build` → 0 warnings/0 errors; `make test-unit` → 18 passed; `make test-integration` → 23 passed; filters `AssetPathTests` → 7, `AssetIngestTests` → 8 | None for T03; media/live gates remain blocked (FFmpeg, LM Studio, Node 24) |
 | T04 | done | 52c61eb | `make build` → 0 warnings/0 errors; `make test-unit` → 31 passed; filter `SafeProcessTests|ManifestHashTests` → 13 passed; `make test-integration` → 23 passed | No FFmpeg needed; media/live gates remain blocked |
 | T05 | done | 5b8c780 | `make build` → 0 warnings/0 errors; `make test-unit` → 31 passed; filtered `CampaignRunTests` → 5 passed; `make test-integration` → 28 passed | M0 gate reached; media/live gates still blocked (FFmpeg, LM Studio, Node 24) |
+| T06 | done | pending | `make build` → 0 warnings/0 errors; `make test-unit` → 31 passed; filtered `JobLeasingTests` → 7 passed; `make test-integration` → 35 passed; 100-job two-worker finalization test passed | No FFmpeg/LM Studio needed; provider uncertainty is blocked for reconciliation, not retried |
 
 ## Last verified commands
 
@@ -145,6 +146,62 @@ job `dedupe_key`; the canonical request hash and revision id live in the job pay
 Cloud scene limits above zero are rejected while paid work is disabled. No client-supplied
 snapshot, claim text or price is accepted as fact.
 
+### T06
+- Command: `dotnet test tests/ContentFactory.IntegrationTests --filter JobLeasingTests`
+  (before implementation)
+  - RED: build failed with `CS0246: The type or namespace name 'IOutboxHandler'`,
+    `OutboxMessage` and `NewJob` could not be found. The test contracts existed but the
+    durable job store, watchdog and outbox dispatcher did not.
+- Command: `make infra-up`
+  - The PostgreSQL container had stopped (`Connection refused` on `127.0.0.1:54329`).
+    It was started and reported healthy. This was an environment prerequisite, not a code
+    failure. Every test run still creates and drops its own `cf_test_<runid>` database.
+- Command: `dotnet test tests/ContentFactory.IntegrationTests --filter JobLeasingTests`
+  → 7 passed, 0 failed, 0 skipped:
+  `TwoWorkersNeverOwnSameFence`, `ExpiredWorkerCannotFinalize`,
+  `UnknownProviderSubmissionBlocksRequeue`, `RetryWaitRespectsNextRunAt`,
+  `HeartbeatExtendsLease`, `OutboxReplayCreatesOneNextJob`,
+  `RollbackCreatesNeitherRevisionNorJob`.
+- Command: `make test-unit` → 31 passed, 0 failed, 0 skipped.
+- Command: `make test-integration` → 35 passed, 0 failed, 0 skipped (7 job leasing,
+  5 campaign run, 8 asset ingest, 8 auth, 1 CLI, 6 schema).
+- Command: `make build` → 0 warnings, 0 errors.
+- Command: `dotnet ef migrations has-pending-model-changes --project
+  src/ContentFactory.Infrastructure --startup-project src/ContentFactory.Api`
+  → "No changes have been made to the model since the last migration."
+- Environment: macOS arm64, .NET SDK 10.0.402 (user-local), PostgreSQL 18 in Docker at
+  `127.0.0.1:54329`, `cf_test_<runid>` databases, temporary per-fixture `DATA_ROOT`.
+  Verified 2026-10-20T15:28:38Z.
+- Notes: 100 fake `download` jobs were leased and finalized by two concurrent workers with
+  separate DbContexts; all 100 ids and `(id, fence)` pairs were distinct. An expired lease
+  could not renew or finalize; the watchdog reclaimed it and the old fence still could not
+  finalize after the job was re-leased with a higher fence. An outbox replay after clearing
+  `published_at` produced one downstream job because its dedupe key is derived from the
+  event id. A `retry_wait` outcome with `NextRunAt` in the future was not claimable until
+  the clock advanced, then reclaimed with the next fence. A PostgreSQL trigger forced the job insert to fail after the revision insert;
+  the transaction rolled back and neither the revision nor the job remained. A job with a
+  `submission_unknown` provider request was blocked, not returned to the queue. No provider
+  API was called and no exactly-once guarantee is claimed beyond the tested DB invariants.
+
+### T06
+Created: `src/ContentFactory.Infrastructure/Jobs/PostgresJobStore.cs`,
+`Jobs/OutboxDispatcher.cs`, `Jobs/LeaseWatchdog.cs`,
+`src/ContentFactory.Infrastructure/Persistence/Migrations/20261020152523_AddJobClaimableIndex.cs`
+and its designer, `tests/ContentFactory.IntegrationTests/JobLeasingTests.cs`.
+Modified: `src/ContentFactory.Infrastructure/Persistence/AppDbContext.cs` (claimable
+partial index includes `retry_wait`), `Persistence/Migrations/AppDbContextModelSnapshot.cs`,
+`tests/ContentFactory.IntegrationTests/SchemaTests.cs` (expects `ix_jobs_claimable`),
+`docs/decisions.md` (ADR-0009), `docs/progress.md`.
+
+Notes: `PostgresJobStore` claims with `FOR UPDATE SKIP LOCKED`, increments `fence` on every
+claim and writes `job_attempts`. Renew/finish predicates require id, status `running`,
+fence, owner and an unexpired lease. `LeaseWatchdog` returns pure/local work to
+`retry_wait`, fails exhausted attempts, and blocks jobs that have any provider request so
+uncertain submissions are reconciled instead of resubmitted. `OutboxDispatcher` derives
+`outbox:<event-id>:<index>` dedupe keys and marks the event published in the same
+transaction. The new partial index is `(lane, priority, run_after, created_at) WHERE status
+IN ('queued', 'retry_wait')`.
+
 ## Files changed
 
 ### T04
@@ -247,17 +304,22 @@ it was not moved or rewritten.
   manifest hashing.
 - ADR-0008: runs freeze approved database facts into an immutable revision and dedupe
   inside the job row; client snapshots and prices are never trusted.
+- ADR-0009: lease claims use `SKIP LOCKED` plus a monotonic fence; outbox replay is
+  deduplicated by event id, and uncertain provider work is blocked for reconciliation.
 - No plan-level architecture change.
 
 ## Paid API activity
 - Disabled; no paid requests authorized and none made.
 
 ## Next exact task
-- Milestone gate: M0 (T00–T05) is complete after the T05 commit is recorded below.
-- Action: stop and hand back the M0 summary for owner review. Do not start T06 until the
-  owner approves the gate.
-- M0 evidence: a product can be created, a claim approved, a campaign created and a run
-  enqueued once even when the same request is repeated. The snapshot and revision are
-  persisted in PostgreSQL; no media production, publication or paid call is claimed.
-- Remaining blockers for later milestones: FFmpeg/FFprobe missing, LM Studio unreachable,
-  Node 26.11.1 vs pinned 24.22.0, and port 3000 occupied.
+- Task ID: T07 — Worker orchestration, pause/resume and resource lanes
+- Inputs/files to read: plan C3, D1, D2, T07; `IJobStore`, `IJobHandler`,
+  `PostgresJobStore`, `LeaseWatchdog`, `RunEnqueuer`, and the Worker project.
+- First failing tests: `WorkflowTests` — `TemplateModeSkipsCloudStages`,
+  `PausePreventsNewHeavyWork`, `SleepRecoveryDoesNotFanOut`,
+  `LostLeaseCancelsLocalProcess`, `PollRescheduleDoesNotConsumeRetryLimit`; and
+  `WorkerRecoveryTests` against real PostgreSQL.
+- Prerequisite: T06. Keep the workflow DAG code-defined, do not let an LLM choose stages.
+  A graceful shutdown must stop new leases and cancel local processes within 30 seconds.
+- Remaining blockers: FFmpeg/FFprobe missing, LM Studio unreachable, Node 26.11.1 vs
+  pinned 24.22.0, and port 3000 occupied.

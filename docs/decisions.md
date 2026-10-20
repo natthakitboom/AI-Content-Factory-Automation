@@ -102,3 +102,25 @@ this file explains local choices and their consequences.
 - Consequences: no provider call happens while enqueuing. Cloud video scene limits above
   zero are rejected until a live paid-work approval exists, and the API never accepts a
   product snapshot, claim or price from the request body.
+
+## ADR-0009 — Lease with a fence; replay the outbox by event id
+
+- Date: 2026-10-20
+- Status: accepted
+- Context: a worker may sleep, lose its database session or be replaced while a local job is
+  still running. Reclaiming the same job without a token lets the old worker commit a stale
+  result. Provider calls add a second hazard: an uncertain submission must never be sent
+  again automatically.
+- Decision: `PostgresJobStore` claims eligible `queued`/`retry_wait` rows in a short
+  transaction with `FOR UPDATE SKIP LOCKED`. Every claim increments `fence`, sets
+  `lease_owner` and a 120-second lease, and writes a `job_attempts` row. Renew and finish
+  predicates require id, status, fence, owner and `lease_until > now`; a mismatch returns
+  false and commits nothing. The watchdog moves expired pure/local jobs to `retry_wait`,
+  marks exhausted attempts `failed`, and blocks any job that has a provider request for
+  reconciliation instead of resubmitting it. `OutboxDispatcher` locks one unpublished event,
+  asks a local handler for downstream jobs, inserts them with
+  `outbox:<event-id>:<index>` dedupe keys and marks the event published in the same
+  transaction.
+- Consequences: a stale worker cannot finalize after another claim. Replaying an event
+  cannot create a second downstream job. The system claims only database invariants, not
+  exactly-once provider execution; uncertain provider work requires explicit reconciliation.

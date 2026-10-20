@@ -658,8 +658,8 @@ namespace ContentFactory.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_jobs_status_lease");
 
                     b.HasIndex("Lane", "Priority", "RunAfter", "CreatedAt")
-                        .HasDatabaseName("ix_jobs_eligible")
-                        .HasFilter("status = 'queued'");
+                        .HasDatabaseName("ix_jobs_claimable")
+                        .HasFilter("status IN ('queued', 'retry_wait')");
 
                     b.ToTable("jobs", "app", t =>
                         {

@@ -152,11 +152,12 @@ public sealed class SchemaTests
         {
             command.CommandText =
                 "SELECT indexdef FROM pg_indexes WHERE schemaname = 'app' " +
-                "AND tablename = 'jobs' AND indexname = 'ix_jobs_eligible'";
+                "AND tablename = 'jobs' AND indexname = 'ix_jobs_claimable'";
             var indexDefinition = (string?)await command.ExecuteScalarAsync();
             Assert.NotNull(indexDefinition);
             Assert.Contains("status", indexDefinition, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("queued", indexDefinition, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("retry_wait", indexDefinition, StringComparison.OrdinalIgnoreCase);
         }
     }
 
