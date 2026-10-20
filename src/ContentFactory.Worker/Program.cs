@@ -1,7 +1,9 @@
 using ContentFactory.Core.Abstractions;
 using ContentFactory.Infrastructure.Billing;
 using ContentFactory.Infrastructure.Jobs;
+using ContentFactory.Infrastructure.Media;
 using ContentFactory.Infrastructure.Persistence;
+using ContentFactory.Infrastructure.Storage;
 using ContentFactory.Worker;
 using ContentFactory.Worker.Handlers;
 using ContentFactory.Worker.Health;
@@ -22,10 +24,19 @@ builder.Services.Configure<HostOptions>(options =>
 
 builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton(StorageOptions.Create(builder.Configuration["DATA_ROOT"]));
 builder.Services.AddSingleton(BudgetOptions.FromEnvironment());
 builder.Services.AddSingleton<LiveApprovalGuard>();
 builder.Services.AddScoped<PriceSnapshotService>();
 builder.Services.AddScoped<IBudgetGuard, PostgresBudgetGuard>();
+builder.Services.AddScoped<FileSystemAssetStore>();
+builder.Services.AddScoped<IAssetStore>(services =>
+    services.GetRequiredService<FileSystemAssetStore>());
+builder.Services.AddSingleton<IProcessRunner, SafeProcessRunner>();
+builder.Services.AddScoped<ITechnicalQa, TechnicalQa>();
+builder.Services.AddScoped<TechnicalQaHandler>();
+builder.Services.AddScoped<IJobHandler>(services =>
+    services.GetRequiredService<TechnicalQaHandler>());
 builder.Services.AddSingleton<ResourceGovernor>();
 builder.Services.AddScoped<PostgresJobStore>(services =>
     new PostgresJobStore(
