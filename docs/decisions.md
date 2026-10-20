@@ -69,3 +69,18 @@ this file explains local choices and their consequences.
   attestation to `unknown`.
 - Consequences: generated or imported assets can still be staged with unknown rights, but
   they cannot enter a production run or a cloud call until the owner attests them.
+
+## ADR-0007 — Safe local process boundary
+
+- Date: 2026-10-20
+- Status: accepted
+- Context: media commands must never be assembled through a shell, and a child process must
+  not receive provider keys or database secrets by accident.
+- Decision: `SafeProcessRunner` starts only allowlisted executables with
+  `UseShellExecute=false` and `ArgumentList`. The child environment is cleared and rebuilt
+  from an explicit allowlist (`PATH`, `HOME`, temp/locale and fontconfig variables). Both
+  output streams are capped; timeout or cancellation kills the entire process tree.
+  `ManifestHasher` hashes canonical JSON with ordinal key sorting and preserved array order.
+- Consequences: adding a new tool requires an explicit allowlist entry. Callers must not
+  log raw process output that may contain user paths or media content; the runner itself
+  never includes arguments or output in exception messages.

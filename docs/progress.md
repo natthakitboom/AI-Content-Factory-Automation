@@ -10,7 +10,7 @@ M0 — T00–T05
 | T01 | done | 9fb596d | `make test-unit` → 9 passed; `make test-integration` → 6 passed; `make migrate` twice → second run no-op | PostgreSQL in Docker on loopback; test DBs are `cf_test_<runid>` and dropped |
 | T02 | done | d29c3b1 | `make test-unit` → 11 passed; `make test-integration` → 15 passed (8 auth + 1 CLI + 6 schema) | Dashboard proxy not built in M0; deferred with UI tasks |
 | T03 | done | 3363b61 | `make build` → 0 warnings/0 errors; `make test-unit` → 18 passed; `make test-integration` → 23 passed; filters `AssetPathTests` → 7, `AssetIngestTests` → 8 | None for T03; media/live gates remain blocked (FFmpeg, LM Studio, Node 24) |
-| T04 | not_started | - | - | - |
+| T04 | done | pending | `make build` → 0 warnings/0 errors; `make test-unit` → 31 passed; filter `SafeProcessTests|ManifestHashTests` → 13 passed; `make test-integration` → 23 passed | No FFmpeg needed; media/live gates remain blocked |
 | T05 | not_started | - | - | - |
 
 ## Last verified commands
@@ -74,7 +74,39 @@ M0 — T00–T05
 - Notes: no paid API, cloud upload or network AI call was made. The content endpoint is
   authenticated and has no public URL. Rights are metadata, not part of the hash.
 
+### T04
+- Command: `make test-unit` (before implementation)
+  - RED: build failed with `CS0234: The type or namespace name 'Media' does not exist in
+    the namespace 'ContentFactory.Infrastructure'` and `CS0246: SafeProcessRunner could
+    not be found`, i.e. the test contracts existed but the implementations did not.
+- Command: `dotnet test tests/ContentFactory.UnitTests --filter
+  "FullyQualifiedName~SafeProcessTests|FullyQualifiedName~ManifestHashTests"`
+  → 13 passed, 0 failed, 0 skipped (7 process, 6 manifest).
+- Command: `make test-unit` → 31 passed, 0 failed, 0 skipped.
+- Command: `make test-integration` → 23 passed, 0 failed, 0 skipped (unchanged; T04 has
+  no database surface).
+- Command: `make build` → 0 warnings, 0 errors.
+- Environment: macOS arm64, .NET SDK 10.0.402 (user-local). The tests use `/usr/bin/printf`,
+  `/bin/sh`, `/bin/sleep`, `/usr/bin/yes` and `/usr/bin/env`; FFmpeg was not required.
+- Notes: `CancellationStopsChildProcess` uses a shell loop that appends to a marker file;
+  after cancellation the marker stops growing, proving the process tree was stopped.
+  `SecretEnvironmentIsNotPassedToChild` sets a parent secret and confirms `/usr/bin/env`
+  cannot see it. `OutputIsCapped` proves the cap without deadlocking a noisy child.
+  No paid API, cloud upload or network AI call was made.
+
 ## Files changed
+
+### T04
+Created: `src/ContentFactory.Infrastructure/Media/SafeProcessRunner.cs`,
+`Media/ManifestHasher.cs`, `tests/ContentFactory.UnitTests/SafeProcessTests.cs`,
+`tests/ContentFactory.UnitTests/ManifestHashTests.cs`.
+Modified: `docs/progress.md`, `docs/decisions.md` (ADR-0007).
+
+Notes: the runner uses `ArgumentList` and `UseShellExecute=false` (no shell), an
+executable allowlist, an explicit environment allowlist, a 64 KiB per-stream output cap,
+and `Kill(entireProcessTree: true)` on timeout/cancel. The manifest hash is SHA-256 over
+UTF-8 canonical JSON with ordinal object-key sorting and preserved array order; enums are
+camelCase strings and numbers/dates use the invariant `System.Text.Json` representation.
 
 ### T03
 Created: `src/ContentFactory.Core/Assets/AssetRightsPolicy.cs`,
@@ -166,13 +198,12 @@ it was not moved or rewritten.
 - Disabled; no paid requests authorized and none made.
 
 ## Next exact task
-- Task ID: T04 — Safe process runner and manifest identity
-- Inputs/files to read: plan C4 render contracts, E1 security, T04
-- First failing tests: `SafeProcessTests` and `ManifestHashTests` —
-  `ShellMetacharactersRemainArguments`, `CancellationStopsChildProcess`,
-  `SameManifestHasSameHash`, `ChangedCaptionChangesHash`,
-  `KeyOrderDoesNotChangeHash`
-- Command: `dotnet test tests/ContentFactory.UnitTests --filter
-  "FullyQualifiedName~SafeProcessTests|FullyQualifiedName~ManifestHashTests"`
-- Prerequisite: T00/T03; no FFmpeg needed. Use `ArgumentList`, no shell, an executable
-  allowlist, cancellation/timeout and capped output logs.
+- Task ID: T05 — Product/campaign snapshot and idempotent run enqueue
+- Inputs/files to read: plan C2/C5, D2, E1, T05; contracts `ProductSnapshot`,
+  `ScriptRequest`, and the existing `Product`, `Campaign` and `Job` entities.
+- First failing tests: `CampaignRunTests` — `DuplicateRequestReturnsSameJob`,
+  `SameKeyDifferentBodyReturns409`, `UnapprovedClaimsBlockRun`,
+  `ProductEditDoesNotMutateOldRevision`
+- Command: `dotnet test tests/ContentFactory.IntegrationTests --filter CampaignRunTests`
+- Prerequisite: T01–T04; real PostgreSQL. Validate claims/assets from the database, never
+  trust a client-supplied snapshot or price. Enqueue exactly one run per idempotency key.
