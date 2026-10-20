@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ContentFactory.Api/ContentFactory.Api.csproj" />
+    <Project Path="src/ContentFactory.Cli/ContentFactory.Cli.csproj" />
+    <Project Path="src/ContentFactory.Contracts/ContentFactory.Contracts.csproj" />
+    <Project Path="src/ContentFactory.Core/ContentFactory.Core.csproj" />
+    <Project Path="src/ContentFactory.Infrastructure/ContentFactory.Infrastructure.csproj" />
+    <Project Path="src/ContentFactory.Worker/ContentFactory.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ContentFactory.IntegrationTests/ContentFactory.IntegrationTests.csproj" />
+    <Project Path="tests/ContentFactory.MediaTests/ContentFactory.MediaTests.csproj" />
+    <Project Path="tests/ContentFactory.UnitTests/ContentFactory.UnitTests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,55 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# .NET
+bin/
+obj/
+TestResults/
+*.user
+*.suo
+*.nupkg
+artifacts/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# Local secrets and configuration
+.env
+.env.*
+!.env.example
+!.env.test.example
+appsettings.Local.json
+*.pfx
+*.p12
+
+# Runtime data (DATA_ROOT is outside the repo by default)
+_data/
+data/
+exports/
+manifests/
+backups/
+temp/
+
+# Generated media that must never be committed
+media/generated/
+*.mp4
+*.mov
+*.wav
+*.mp3
+*.m4a
+
+# Tooling
+.config/dotnet-tools.json.lock
+
+# Local reports that may contain machine paths
+docs/environment-report.local.md

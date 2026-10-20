@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>dotnet-ContentFactory.Worker-f7a5e507-d9c6-4819-96cf-2e37cd87a3bb</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ContentFactory.Infrastructure\ContentFactory.Infrastructure.csproj" />
+    <ProjectReference Include="..\ContentFactory.Core\ContentFactory.Core.csproj" />
+    <ProjectReference Include="..\ContentFactory.Contracts\ContentFactory.Contracts.csproj" />
+  </ItemGroup>
+</Project>
