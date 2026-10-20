@@ -77,7 +77,7 @@ public sealed class SafeProcessRunnerOptions
 /// receives only an explicit environment allowlist, both output streams are capped, and a
 /// timeout or cancellation kills the whole process tree.
 /// </summary>
-public sealed class SafeProcessRunner
+public sealed class SafeProcessRunner : IProcessRunner
 {
     private static readonly TimeSpan DrainTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan KillTimeout = TimeSpan.FromSeconds(5);
