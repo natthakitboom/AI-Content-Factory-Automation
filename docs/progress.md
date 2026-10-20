@@ -17,7 +17,7 @@ M1 — T06–T12 (T11 complete; T12 next)
 | T08 | done | 0a1ee43, 9d3616f | `make build` → 0 warnings/0 errors; `make test-unit` → 47 passed; filtered `ScriptValidationTests` → 10 passed; `make test-integration` → 56 passed; filtered `PlannerAdapterTests` → 16 passed; live LM Studio smoke → 2/2 validator-approved runs; no pending model changes | Live LM Studio remains an optional local gate (not CI); no paid calls; token usage is captured in `ScriptPlanTrace` because the plan schema has no token column |
 | T09 | done | 115360a | `make build` → 0 warnings/0 errors; `make test-unit` → 56 passed; filtered `LiveApprovalTests` → 9 passed; `make test-integration` → 71 passed; filtered `BudgetRaceTests` → 15 passed; no pending model changes; `make migrate` applied `AddBudgetReservations` | No paid calls; FFmpeg/Node/port 3000 blockers unchanged; T13 must use the video-scope overload for a per-video cap |
 | T10 | done | 6bd8282 | `make build` → 0 warnings/0 errors; `make test-unit` → 73 passed; `make test-integration` → 82 passed; filtered `VoiceManifestTests` → 17 passed; filtered `VoiceProviderTests` → 11 passed; no pending model changes; `make test-media` → exit 2 blocked | No live Azure/paid calls; real FFprobe/FFmpeg execution blocked because the binaries are missing; adapter is not yet wired to a worker stage (T12) |
-| T11 | done | 5383f60 | `make build` → 0 warnings/0 errors; `make test-unit` → 86 passed; filtered `TimelineTests` → 13 passed; `make test-integration` → 82 passed; filtered `RenderGoldenTests` → 3 skipped; `make test-media` → exit 2 blocked; no pending model changes | FFmpeg/FFprobe and a Thai-capable font are missing, so no native MP4 or golden frame was produced; renderer/compiler is not wired to a worker stage until T12 |
+| T11 | done | 5383f60, 3535607 | `make build` → 0 warnings/0 errors; `make test-unit` → 86 passed; filtered `TimelineTests` → 13 passed; `make test-integration` → 82 passed; filtered `RenderGoldenTests` → 3 skipped; `make test-media` → exit 2 blocked; no pending model changes | FFmpeg/FFprobe and a Thai-capable font are missing, so no native MP4 or golden frame was produced; renderer/compiler is not wired to a worker stage until T12 |
 
 ## Last verified commands
 
@@ -438,14 +438,15 @@ snapshot, claim text or price is accepted as fact.
   src/ContentFactory.Infrastructure --startup-project src/ContentFactory.Api --no-build`
   → "No changes have been made to the model since the last migration."
 - Environment: macOS arm64, .NET SDK 10.0.402 (user-local), PostgreSQL 18 in Docker at
-  `127.0.0.1:54329`, `cf_test_<runid>` databases. Verified 2026-10-20T18:10:55Z.
+  `127.0.0.1:54329`, `cf_test_<runid>` databases. Verified 2026-10-20T18:13:11Z.
 - Notes: `TimelineCompiler` compiles the product-basic v1 template (1080x1920, 30 fps)
   from scene ids, voices and immutable visual references. It rounds every scene up to the
   frame grid before cumulative starts are calculated, enforces the 15–35 second range,
   requires narration and a CTA, rejects duplicate or blank scene ids, and hashes the
   canonical script. `CaptionLayout` wraps Thai by grapheme cluster, limits captions to two
-  safe lines, escapes ASS override text, writes SRT as the stored subtitle asset and uses a
-  conservative width measurer that fails closed; a host may inject real font metrics
+  safe lines, escapes ASS override text (literal backslashes use a word joiner; braces use
+  libass escapes), writes SRT as the stored subtitle asset and uses a conservative width
+  measurer that fails closed; a host may inject real font metrics
   through `ITextWidthMeasurer`. `EncoderProbe` performs a real hardware probe before
   accepting `h264_videotoolbox`, falls back to `libx264 -threads 4`, and blocks when the
   `subtitles`/libass filter or Thai font is unavailable. `FfmpegVideoRenderer` validates

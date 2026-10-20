@@ -298,8 +298,10 @@ this file explains local choices and their consequences.
   fingerprint.
 - Decision: `CaptionLayout` wraps by grapheme cluster, never by UTF-8 byte count, limits a
   caption to two lines and 100 ms padding, and escapes ASS control characters so model
-  text is rendered literally. It writes ASS for the FFmpeg burn-in and SRT for the stored
-  subtitle asset; ASS is not persisted. Width validation goes through
+  text is rendered literally. Literal backslashes get a word joiner after them because ASS
+  has no `\\` escape; opening and closing braces use the libass `\{`/`\}` escapes. It
+  writes ASS for the FFmpeg burn-in and SRT for the stored subtitle asset; ASS is not
+  persisted. Width validation goes through
   `ITextWidthMeasurer`. The default `ConservativeTextMeasurer` deliberately
   over-estimates and fails closed; a production host must inject metrics from the same
   font renderer it burns in. T12 must also run the technical QA bounds check on the
