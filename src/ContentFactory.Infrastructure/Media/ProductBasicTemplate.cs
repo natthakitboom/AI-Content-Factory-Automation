@@ -9,7 +9,6 @@ public static class ProductBasicTemplate
     public const string Version = "product-basic.v1";
     public const string RendererVersion = "ffmpeg-native-v1";
     public const string FontName = "Thonburi UI";
-    public const string FontFingerprint = "configured:thonburi-ui-v1";
 
     public const int Width = 1080;
     public const int Height = 1920;

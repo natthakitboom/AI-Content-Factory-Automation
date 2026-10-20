@@ -69,7 +69,7 @@ public sealed class TimelineOptions
 
     public string RendererVersion { get; init; } = ProductBasicTemplate.RendererVersion;
 
-    public string FontFingerprint { get; init; } = ProductBasicTemplate.FontFingerprint;
+    public string FontFingerprint { get; init; } = string.Empty;
 
     internal void Validate()
     {
@@ -95,11 +95,11 @@ public sealed class TimelineOptions
         }
 
         if (string.IsNullOrWhiteSpace(RendererVersion) ||
-            string.IsNullOrWhiteSpace(FontFingerprint))
+            !FontFingerprintIdentity.IsSha256(FontFingerprint))
         {
             throw new ValidationException(
                 "TIMELINE_CONFIG_INVALID",
-                "Renderer and font fingerprints are required for approval identity.");
+                "A renderer version and a SHA-256 font fingerprint are required for approval identity.");
         }
     }
 }

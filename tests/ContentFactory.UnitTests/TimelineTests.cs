@@ -21,6 +21,8 @@ public sealed class TimelineTests
     private static readonly Guid VideoVersionId =
         Guid.Parse("33333333-3333-3333-3333-333333333333");
 
+    private static readonly string TestFontFingerprint = new('a', 64);
+
     [Fact]
     public void TimelineDurationUsesFrameGrid()
     {
@@ -36,7 +38,7 @@ public sealed class TimelineTests
         };
         var visuals = CreateVisuals(script);
 
-        var manifest = new TimelineCompiler().Compile(
+        var manifest = CreateCompiler().Compile(
             VideoVersionId, script, visuals, voices, ProductBasicTemplate.Version);
 
         Assert.Equal(1080, manifest.Width);
@@ -78,12 +80,12 @@ public sealed class TimelineTests
             CreateVoice("scene-3", 5_000)
         };
 
-        var manifest = new TimelineCompiler().Compile(
+        var manifest = CreateCompiler().Compile(
             VideoVersionId, script, CreateVisuals(script), voices, ProductBasicTemplate.Version);
 
         Assert.Equal(ProductBasicTemplate.Version, manifest.TemplateVersion);
         Assert.Equal(ProductBasicTemplate.RendererVersion, manifest.RendererVersion);
-        Assert.Equal(ProductBasicTemplate.FontFingerprint, manifest.FontFingerprint);
+        Assert.Equal(TestFontFingerprint, manifest.FontFingerprint);
         Assert.Matches("^[0-9a-f]{64}$", manifest.ScriptSha256);
         Assert.Equal(3, manifest.Segments.Count);
         Assert.Equal(script.Scenes.Select(scene => scene.SceneId),
@@ -104,7 +106,7 @@ public sealed class TimelineTests
         visuals.Remove("scene-2");
 
         var exception = Assert.Throws<ValidationException>(() =>
-            new TimelineCompiler().Compile(
+            CreateCompiler().Compile(
                 VideoVersionId,
                 script,
                 visuals,
@@ -128,7 +130,7 @@ public sealed class TimelineTests
             ("cta", "สั่งซื้อ", "สั่งซื้อ"));
 
         var exception = Assert.Throws<ValidationException>(() =>
-            new TimelineCompiler().Compile(
+            CreateCompiler().Compile(
                 VideoVersionId,
                 script,
                 CreateVisuals(script),
@@ -232,7 +234,7 @@ public sealed class TimelineTests
             ("benefit", "ประโยชน์", "ประโยชน์"),
             ("cta", "สั่งซื้อ", "สั่งซื้อ"));
         var firstVoice = CreateVoice("scene-1", 15_000);
-        var manifest = new TimelineCompiler().Compile(
+        var manifest = CreateCompiler().Compile(
             VideoVersionId,
             script,
             CreateVisuals(script),
@@ -396,7 +398,7 @@ public sealed class TimelineTests
                 4,
                 HardwareAccelerated: false,
                 "CPU fallback",
-                ProductBasicTemplate.FontFingerprint),
+                TestFontFingerprint),
             new FfmpegRenderOptions());
 
         Assert.Contains("-movflags", args);
@@ -424,6 +426,18 @@ public sealed class TimelineTests
         Assert.DoesNotContain("ข้อความทดสอบ", filter, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void MissingFontFingerprintFailsClosed()
+    {
+        var exception = Assert.Throws<ValidationException>(
+            () => new TimelineCompiler(new TimelineOptions()));
+
+        Assert.Equal("TIMELINE_CONFIG_INVALID", exception.Code);
+    }
+
+    private static TimelineCompiler CreateCompiler()
+        => new(new TimelineOptions { FontFingerprint = TestFontFingerprint });
+
     private static EncoderProbe CreateProbe(FakeProcessRunner runner)
         => new(
             runner,
@@ -431,7 +445,7 @@ public sealed class TimelineTests
                 Path.GetTempPath(),
                 "cf-timeline-tests",
                 Guid.NewGuid().ToString("N"))),
-            new EncoderProbeOptions());
+            new EncoderProbeOptions { FontFingerprint = TestFontFingerprint });
 
     private static FfmpegVideoRenderer CreateRenderer(
         CaptionLayout layout,
@@ -463,7 +477,7 @@ public sealed class TimelineTests
             new string('a', 64),
             ProductBasicTemplate.Version,
             ProductBasicTemplate.RendererVersion,
-            ProductBasicTemplate.FontFingerprint,
+            TestFontFingerprint,
             ProductBasicTemplate.Width,
             ProductBasicTemplate.Height,
             ProductBasicTemplate.Fps,

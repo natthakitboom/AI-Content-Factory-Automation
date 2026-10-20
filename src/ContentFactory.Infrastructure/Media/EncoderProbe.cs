@@ -25,7 +25,7 @@ public sealed class EncoderProbeOptions
 
     public int FontSize { get; init; } = ProductBasicTemplate.CaptionFontSize;
 
-    public string FontFingerprint { get; init; } = ProductBasicTemplate.FontFingerprint;
+    public string FontFingerprint { get; init; } = string.Empty;
 
     public void Validate()
     {
@@ -67,11 +67,11 @@ public sealed class EncoderProbeOptions
 
         if (string.IsNullOrWhiteSpace(FontName) ||
             FontSize <= 0 ||
-            string.IsNullOrWhiteSpace(FontFingerprint))
+            !FontFingerprintIdentity.IsSha256(FontFingerprint))
         {
             throw new ValidationException(
                 "RENDER_PROBE_CONFIG_INVALID",
-                "A caption font name, size and fingerprint are required.");
+                "A caption font name, size and SHA-256 font fingerprint are required.");
         }
     }
 }

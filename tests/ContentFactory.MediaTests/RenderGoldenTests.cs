@@ -28,6 +28,8 @@ public sealed class MediaFactAttribute : FactAttribute
 
 internal static class MediaPrerequisites
 {
+    public static readonly string TestFontFingerprint = new('a', 64);
+
     public static bool Ready { get; }
 
     public static string Reason { get; } = string.Empty;
@@ -82,7 +84,7 @@ internal static class MediaPrerequisites
                     new string('0', 64),
                     ProductBasicTemplate.Version,
                     ProductBasicTemplate.RendererVersion,
-                    ProductBasicTemplate.FontFingerprint,
+                    MediaPrerequisites.TestFontFingerprint,
                     ProductBasicTemplate.Width,
                     ProductBasicTemplate.Height,
                     ProductBasicTemplate.Fps,
@@ -265,7 +267,8 @@ public sealed class RenderGoldenTests
                     null,
                     null)).ToArray());
 
-            var compiler = new TimelineCompiler();
+            var compiler = new TimelineCompiler(
+                new TimelineOptions { FontFingerprint = MediaPrerequisites.TestFontFingerprint });
             var manifest = compiler.Compile(
                 Guid.NewGuid(),
                 script,
@@ -287,7 +290,13 @@ public sealed class RenderGoldenTests
                 Assert.InRange(report.Lines.Count, 1, 2);
             }
 
-            var probe = new EncoderProbe(runner, storage, new EncoderProbeOptions());
+            var probe = new EncoderProbe(
+                runner,
+                storage,
+                new EncoderProbeOptions
+                {
+                    FontFingerprint = MediaPrerequisites.TestFontFingerprint
+                });
             var renderer = new FfmpegVideoRenderer(
                 assetStore,
                 storage,
