@@ -84,3 +84,21 @@ this file explains local choices and their consequences.
 - Consequences: adding a new tool requires an explicit allowlist entry. Callers must not
   log raw process output that may contain user paths or media content; the runner itself
   never includes arguments or output in exception messages.
+
+## ADR-0008 — Runs freeze approved facts and dedupe inside the job row
+
+- Date: 2026-10-20
+- Status: accepted
+- Context: a campaign run must be reproducible and retry-safe without adding a second
+  idempotency store before T06 introduces the durable job store. Client-supplied snapshots
+  and prices cannot be trusted, and a later product edit must not rewrite history.
+- Decision: `POST /campaigns/{id}/runs` rebuilds the `ProductSnapshot` from PostgreSQL
+  (approved, unexpired claims and owner-attested assets only), serialises it into an
+  immutable `content_revisions` row, and inserts the first `plan_script` job in the same
+  transaction. The job's `dedupe_key` binds the campaign and the `Idempotency-Key`; its
+  JSON payload stores the canonical request hash and the revision id. Same key plus same
+  body returns the original `{jobId, revisionId}`; same key plus a different body returns
+  `409 IDEMPOTENCY_CONFLICT`. Revision numbering locks the campaign row (`FOR UPDATE`).
+- Consequences: no provider call happens while enqueuing. Cloud video scene limits above
+  zero are rejected until a live paid-work approval exists, and the API never accepts a
+  product snapshot, claim or price from the request body.

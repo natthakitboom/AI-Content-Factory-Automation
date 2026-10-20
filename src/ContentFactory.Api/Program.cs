@@ -43,6 +43,7 @@ builder.Services.AddSingleton(storageOptions);
 builder.Services.AddScoped<FileSystemAssetStore>();
 builder.Services.AddScoped<IAssetStore>(services => services.GetRequiredService<FileSystemAssetStore>());
 builder.Services.AddScoped<AssetIngestService>();
+builder.Services.AddScoped<ContentFactory.Infrastructure.Jobs.RunEnqueuer>();
 builder.Services.AddSingleton<LoginThrottle>();
 builder.Services.AddSingleton<IPasswordHasher<OwnerUser>, PasswordHasher<OwnerUser>>();
 builder.Services.AddSingleton(new SecretRedactor(
@@ -124,6 +125,8 @@ app.MapGet("/health/ready", async (AppDbContext db, CancellationToken ct) =>
 }).AllowAnonymous();
 
 app.MapAuthEndpoints();
+app.MapProductEndpoints();
+app.MapCampaignEndpoints();
 app.MapAssetEndpoints();
 
 app.Run();

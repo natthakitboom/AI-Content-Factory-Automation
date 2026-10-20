@@ -43,6 +43,14 @@ public sealed class ExceptionMappingMiddleware
                 exception.Message)
                 .ExecuteAsync(context);
         }
+        catch (ConflictException exception) when (!context.Response.HasStarted)
+        {
+            await ApiProblem.Create(
+                StatusCodes.Status409Conflict,
+                exception.Code,
+                exception.Message)
+                .ExecuteAsync(context);
+        }
         catch (BadHttpRequestException exception) when (!context.Response.HasStarted)
         {
             var status = exception.StatusCode == StatusCodes.Status413PayloadTooLarge

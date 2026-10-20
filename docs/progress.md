@@ -11,7 +11,7 @@ M0 — T00–T05
 | T02 | done | d29c3b1 | `make test-unit` → 11 passed; `make test-integration` → 15 passed (8 auth + 1 CLI + 6 schema) | Dashboard proxy not built in M0; deferred with UI tasks |
 | T03 | done | 3363b61 | `make build` → 0 warnings/0 errors; `make test-unit` → 18 passed; `make test-integration` → 23 passed; filters `AssetPathTests` → 7, `AssetIngestTests` → 8 | None for T03; media/live gates remain blocked (FFmpeg, LM Studio, Node 24) |
 | T04 | done | 52c61eb | `make build` → 0 warnings/0 errors; `make test-unit` → 31 passed; filter `SafeProcessTests|ManifestHashTests` → 13 passed; `make test-integration` → 23 passed | No FFmpeg needed; media/live gates remain blocked |
-| T05 | not_started | - | - | - |
+| T05 | done | pending | `make build` → 0 warnings/0 errors; `make test-unit` → 31 passed; filtered `CampaignRunTests` → 5 passed; `make test-integration` → 28 passed | M0 gate reached; media/live gates still blocked (FFmpeg, LM Studio, Node 24) |
 
 ## Last verified commands
 
@@ -93,6 +93,57 @@ M0 — T00–T05
   `SecretEnvironmentIsNotPassedToChild` sets a parent secret and confirms `/usr/bin/env`
   cannot see it. `OutputIsCapped` proves the cap without deadlocking a noisy child.
   No paid API, cloud upload or network AI call was made.
+
+### T05
+- Command: `dotnet test tests/ContentFactory.IntegrationTests --filter CampaignRunTests`
+  (before implementation)
+  - RED: total 4, passed 0, failed 4. Every test failed at the first API call with
+    `Expected: Created, Actual: NotFound` because the product/campaign endpoints did not
+    exist. The failures were missing implementation, not a database or environment fault.
+- Command: `dotnet test tests/ContentFactory.IntegrationTests --filter CampaignRunTests`
+  → 5 passed, 0 failed, 0 skipped (`DuplicateRequestReturnsSameJob`,
+  `SameKeyDifferentBodyReturns409`, `UnapprovedClaimsBlockRun`,
+  `ProductEditDoesNotMutateOldRevision`, `UnattestedAssetBlocksRun`).
+- Command: `make test-unit` → 31 passed, 0 failed, 0 skipped (unchanged; T05 is an API
+  and PostgreSQL surface).
+- Command: `make test-integration` → 28 passed, 0 failed, 0 skipped (5 campaign run,
+  8 asset ingest, 8 auth, 1 CLI, 6 schema).
+- Command: `make build` → 0 warnings, 0 errors.
+- API smoke: `CampaignRunTests` drives the real in-process API pipeline with cookie auth,
+  CSRF and PostgreSQL. It creates a product, an approved claim, a channel, a campaign and
+  a run, then reloads the persisted revision. No FFmpeg, LM Studio, paid API or other
+  network AI call is involved.
+- Environment: macOS arm64, .NET SDK 10.0.402 (user-local), PostgreSQL 18 in Docker at
+  `127.0.0.1:54329`, `cf_test_<runid>` databases, temporary per-fixture `DATA_ROOT`.
+  Verified 2026-10-20T15:15:40Z.
+- Notes: the snapshot is rebuilt only from database rows. The request body includes
+  deliberately spoofed `productSnapshot` and `price` fields in the duplicate test; they
+  are ignored. Pending claims are excluded and a product with no approved, unexpired
+  claim is blocked with `RUN_FACTS_UNAPPROVED`. Attached assets with unknown/rejected
+  rights block the run with `RUN_ASSET_RIGHTS_UNATTESTED`. The same idempotency key with
+  the same canonical body returns the original job and revision; a different body returns
+  `409 IDEMPOTENCY_CONFLICT` and creates nothing.
+
+### T05
+Created: `src/ContentFactory.Core/Products/ProductSnapshotBuilder.cs`,
+`src/ContentFactory.Core/Exceptions/ConflictException.cs`,
+`src/ContentFactory.Infrastructure/Jobs/RunEnqueuer.cs`,
+`src/ContentFactory.Api/Endpoints/ProductEndpoints.cs`,
+`src/ContentFactory.Api/Endpoints/CampaignEndpoints.cs`,
+`tests/ContentFactory.IntegrationTests/CampaignRunTests.cs`.
+Modified: `src/ContentFactory.Api/Program.cs` (run enqueuer DI and endpoint mapping),
+`src/ContentFactory.Api/Middleware/ExceptionMappingMiddleware.cs` (409 conflict mapping),
+`docs/decisions.md` (ADR-0008), `docs/progress.md`.
+
+Notes: `POST /api/v1/products`, `POST /api/v1/products/{id}/claims`,
+`POST /api/v1/products/{id}/offers`, `GET /api/v1/products/{id}`,
+`POST /api/v1/campaigns` and `POST /api/v1/campaigns/{id}/runs` require authentication;
+mutations still require CSRF. A run inserts exactly one `content_revisions` row and one
+`plan_script` job in the same transaction. Revision numbering takes a `FOR UPDATE` lock on
+the campaign row. The idempotency key (16–128 printable ASCII) and campaign id form the
+job `dedupe_key`; the canonical request hash and revision id live in the job payload.
+Cloud scene limits above zero are rejected while paid work is disabled. No client-supplied
+snapshot, claim text or price is accepted as fact.
 
 ## Files changed
 
@@ -192,18 +243,21 @@ it was not moved or rewritten.
 - ADR-0005: `decimal`/`numeric(18,6)` money and `timestamptz` instants.
 - ADR-0006: production/cloud use requires an owner rights attestation with a source
   reference; rights status is `unknown` by default.
+- ADR-0007: safe local process boundary with an executable allowlist and canonical JSON
+  manifest hashing.
+- ADR-0008: runs freeze approved database facts into an immutable revision and dedupe
+  inside the job row; client snapshots and prices are never trusted.
 - No plan-level architecture change.
 
 ## Paid API activity
 - Disabled; no paid requests authorized and none made.
 
 ## Next exact task
-- Task ID: T05 — Product/campaign snapshot and idempotent run enqueue
-- Inputs/files to read: plan C2/C5, D2, E1, T05; contracts `ProductSnapshot`,
-  `ScriptRequest`, and the existing `Product`, `Campaign` and `Job` entities.
-- First failing tests: `CampaignRunTests` — `DuplicateRequestReturnsSameJob`,
-  `SameKeyDifferentBodyReturns409`, `UnapprovedClaimsBlockRun`,
-  `ProductEditDoesNotMutateOldRevision`
-- Command: `dotnet test tests/ContentFactory.IntegrationTests --filter CampaignRunTests`
-- Prerequisite: T01–T04; real PostgreSQL. Validate claims/assets from the database, never
-  trust a client-supplied snapshot or price. Enqueue exactly one run per idempotency key.
+- Milestone gate: M0 (T00–T05) is complete after the T05 commit is recorded below.
+- Action: stop and hand back the M0 summary for owner review. Do not start T06 until the
+  owner approves the gate.
+- M0 evidence: a product can be created, a claim approved, a campaign created and a run
+  enqueued once even when the same request is repeated. The snapshot and revision are
+  persisted in PostgreSQL; no media production, publication or paid call is claimed.
+- Remaining blockers for later milestones: FFmpeg/FFprobe missing, LM Studio unreachable,
+  Node 26.11.1 vs pinned 24.22.0, and port 3000 occupied.
