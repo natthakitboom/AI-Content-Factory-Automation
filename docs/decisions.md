@@ -277,3 +277,52 @@ this file explains local choices and their consequences.
   is synthetic transport data and is not production narration acceptance. Actual FFprobe/
   FFmpeg probing and concatenation remain blocked in this checkout because those binaries
   are not installed.
+
+## ADR-0014 — Native vertical rendering uses a frame grid, fail-closed captions and probed tools
+
+- Date: 2026-10-21
+- Status: accepted
+- Context: T11 must turn a validated script and measured narration into a real vertical
+  product video without a cloud video API. The render must keep Thai marks attached to
+  their base characters, preserve ASS override text literally, never silently drop
+  captions, and refuse to produce an output when the local encoder, subtitle filter or
+  font is unavailable. The task also needs deterministic timing so a later QA stage can
+  compare frames and durations.
+- Decision: `TimelineCompiler` compiles the immutable `product-basic.v1` template at
+  1080x1920 and 30 fps. It maps each script scene to its visual by `sceneId`, requires a
+  voice segment and at least one CTA, rejects blank/duplicate scene ids and missing
+  narration, and enforces the 15–35 second range. Each scene duration is rounded up to the
+  next frame before cumulative start times are calculated, so every segment starts and
+  ends on the frame grid and the manifest's durations remain contiguous. The manifest
+  records the canonical script hash, template version, renderer version and font
+  fingerprint.
+- Decision: `CaptionLayout` wraps by grapheme cluster, never by UTF-8 byte count, limits a
+  caption to two lines and 100 ms padding, and escapes ASS control characters so model
+  text is rendered literally. It writes ASS for the FFmpeg burn-in and SRT for the stored
+  subtitle asset; ASS is not persisted. Width validation goes through
+  `ITextWidthMeasurer`. The default `ConservativeTextMeasurer` deliberately
+  over-estimates and fails closed; a production host must inject metrics from the same
+  font renderer it burns in. T12 must also run the technical QA bounds check on the
+  actual rendered captions. Captions are never shrunk, truncated or skipped to make a
+  render pass.
+- Decision: `EncoderProbe` treats a hardware encoder listed by FFmpeg as untrusted until a
+  real probe encode succeeds. It probes `h264_videotoolbox`, then falls back explicitly to
+  `libx264` with bounded threads, and fails closed when the `subtitles`/libass filter or a
+  Thai-capable font is not available. `FfmpegVideoRenderer` validates the manifest and
+  captions before starting a process, copies local inputs to UUID temp paths, builds the
+  filter graph with escaped paths, burns the generated ASS, extracts a thumbnail at the
+  template frame (not blindly the first frame), verifies the MP4/JPEG magic bytes, and
+  registers content-addressed video, thumbnail and SRT assets only after success.
+  `IProcessRunner` keeps process execution behind `SafeProcessRunner` and makes encoder,
+  caption and failure tests possible without the native tools.
+- Consequences: the manifest identity changes when the template, renderer or font
+  changes, so an approval cannot silently authorize a different render. T11 adds no
+  database migration and no worker handler; T12 wires the compiler and renderer into the
+  job pipeline and performs the full media gate. In this checkout FFmpeg, FFprobe and a
+  Thai font are absent, so the real MP4, encoder probes and golden-frame tests are
+  `blocked`/`skipped`, never `passed`. No paid API, credential, cloud upload or publication
+  is involved.
+- Notes: the product-basic template is code-defined constants because the T11 file list
+  did not include a configuration loader. Moving it to versioned JSON later must preserve
+  the same manifest fields and invalidation behavior. `SafeProcessRunner` now implements
+  `IProcessRunner`; its argument-list and environment-allowlist behavior is unchanged.
