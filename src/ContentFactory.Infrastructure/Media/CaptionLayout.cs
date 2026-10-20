@@ -219,7 +219,9 @@ public sealed class CaptionLayout
 
     /// <summary>
     /// Escapes text that must be displayed literally inside an ASS dialogue line. Braces,
-    /// backslashes and newlines can otherwise become libass override controls.
+    /// backslashes and newlines can otherwise become libass override controls. A literal
+    /// backslash gets a word joiner after it because ASS has no <c>\\</c> escape and
+    /// otherwise <c>\N</c>, <c>\n</c> or <c>\h</c> in user text would change the line.
     /// </summary>
     public static string EscapeAssText(string text)
     {
@@ -236,7 +238,7 @@ public sealed class CaptionLayout
                     builder.Append("\\N");
                     break;
                 case '\\':
-                    builder.Append("\\\\");
+                    builder.Append("\\\u2060");
                     break;
                 case '{':
                     builder.Append("\\{");

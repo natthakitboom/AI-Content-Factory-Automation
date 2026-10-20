@@ -182,6 +182,10 @@ public sealed class TimelineTests
         Assert.True(result.Passed);
         Assert.DoesNotContain("{\\an8}", result.AssText, StringComparison.Ordinal);
         Assert.Contains("\\{", result.AssText, StringComparison.Ordinal);
+
+        var backslashText = CaptionLayout.EscapeAssText(@"C:\New folder");
+        Assert.Contains("\\\u2060N", backslashText, StringComparison.Ordinal);
+        Assert.DoesNotContain("\\N", backslashText, StringComparison.Ordinal);
     }
 
     [Fact]
