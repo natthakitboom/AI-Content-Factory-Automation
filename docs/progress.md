@@ -1,7 +1,7 @@
 # Development progress
 
 ## Current milestone
-M1 — T06–T12 (T11 complete; T12 next)
+M1 — T06–T12 (T12 complete; M1 gate review next)
 
 ## Task status
 | Task | Status | Commit | Evidence | Blocker |
@@ -18,6 +18,7 @@ M1 — T06–T12 (T11 complete; T12 next)
 | T09 | done | 115360a | `make build` → 0 warnings/0 errors; `make test-unit` → 56 passed; filtered `LiveApprovalTests` → 9 passed; `make test-integration` → 71 passed; filtered `BudgetRaceTests` → 15 passed; no pending model changes; `make migrate` applied `AddBudgetReservations` | No paid calls; FFmpeg/Node/port 3000 blockers unchanged; T13 must use the video-scope overload for a per-video cap |
 | T10 | done | 6bd8282 | `make build` → 0 warnings/0 errors; `make test-unit` → 73 passed; `make test-integration` → 82 passed; filtered `VoiceManifestTests` → 17 passed; filtered `VoiceProviderTests` → 11 passed; no pending model changes; `make test-media` → exit 2 blocked | No live Azure/paid calls; real FFprobe/FFmpeg execution blocked because the binaries are missing; adapter is not yet wired to a worker stage (T12) |
 | T11 | done | 5383f60, 3535607, 66f5820 | `make build` → 0 warnings/0 errors; `make test-unit` → 87 passed; filtered `TimelineTests` → 14 passed; `make test-integration` → 82 passed; filtered `RenderGoldenTests` → 3 skipped; `make test-media` → exit 2 blocked; no pending model changes | FFmpeg/FFprobe and a Thai-capable font are missing, so no native MP4 or golden frame was produced; renderer/compiler is not wired to a worker stage until T12 |
+| T12 | done | c94ff42 | `make build` → 0 warnings/0 errors; `make test-unit` → 95 passed; filtered `TechnicalQaLogicTests` → 8 passed; `make test-integration` → 86 passed; filtered `ReviewReadyTests` → 4 passed; filtered `TechnicalQaTests` → 6 skipped; `make test-media` → exit 2 blocked; no pending model changes | FFmpeg/FFprobe and a Thai-capable font are missing, so the real-media QA suite was skipped and no MP4 QA pass was claimed; compile/render/voice worker handlers remain unwired until T15 |
 
 ## Last verified commands
 
@@ -466,6 +467,60 @@ snapshot, claim text or price is accepted as fact.
   `ApprovalExpiresDuringBatch` now starts from `DateTimeOffset.UtcNow` and is committed
   separately as `6642de1`.
 
+### T12
+- Command: `make build` (before implementation)
+  - RED: build failed with `CS0246` because `TechnicalQa` and `TechnicalQaHandler`
+    did not exist, and the test helpers lacked the `IAssetStore` abstraction. This was a
+    compile failure, not a media assertion failure.
+- Command: `make build` → 0 warnings, 0 errors.
+- Command: `make test-unit` → 95 passed, 0 failed, 0 skipped.
+- Command: `dotnet test tests/ContentFactory.UnitTests --filter TechnicalQaLogicTests`
+  → 8 passed, 0 failed, 0 skipped: `ValidMetadataPasses`,
+  `CorruptProbeResultIsRejected`, `MissingAudioMetadataIsRejected`,
+  `WrongDimensionMetadataIsRejected`, `DurationBoundsAreEnforced`,
+  `SilentAudioIsRejected`, `BlackEndCardIsWarningOnly`,
+  `SubtitleOverflowIsRejected`.
+- Command: `make test-integration` → 86 passed, 0 failed, 0 skipped.
+- Command: `dotnet test tests/ContentFactory.IntegrationTests --filter ReviewReadyTests`
+  → 4 passed, 0 failed, 0 skipped:
+  `TemplateOnlyRunReachesAwaitingReviewWithMockPlannerAndUploadedNarration`,
+  `FailedQaKeepsOutputAndMarksQaFailed`, `ManifestHashMismatchBlocksBeforeQa`,
+  `QaToolFailureMarksVideoBlocked`.
+- Command: `dotnet test tests/ContentFactory.MediaTests --filter TechnicalQaTests`
+  → 6 skipped, 0 passed, 0 failed, 0 skipped-as-pass:
+  `CorruptMp4Rejected`, `MissingAudioRejectedWhenNarrationExpected`,
+  `WrongDimensionsRejected`, `DurationOutsideBoundsRejected`,
+  `ValidNarratedClipPasses`, `IntentionalEndCardDoesNotTriggerWholeClipFailure`.
+- Command: `make test-media` → exit 2, blocked: "FFmpeg/FFprobe are not installed;
+  media tests are blocked (not passed)."
+- Command: `dotnet ef migrations has-pending-model-changes --project
+  src/ContentFactory.Infrastructure --startup-project src/ContentFactory.Api --no-build`
+  → "No changes have been made to the model since the last migration."
+- Environment: macOS arm64, .NET SDK 10.0.402 (user-local), PostgreSQL 18 in Docker at
+  `127.0.0.1:54329`, `cf_test_<runid>` databases. Verified 2026-10-20T19:01:10Z.
+- Notes: `TechnicalQa` checks the stored MP4/thumbnail/subtitles with FFprobe and FFmpeg:
+  stream presence, H.264/yuv420p, 1080x1920, 30 fps, AAC 48 kHz stereo, 15–35 second
+  duration, A/V duration drift, full decode, audio volume, black-frame warnings and SRT
+  cue timing/line count. Corrupt media, missing audio, wrong dimensions/codecs, bad
+  durations, decode failure and silent narration are errors. Black frames are warnings
+  because an intentional title/end card is allowed; a black frame never converts a
+  failed clip into a pass by itself.
+- Notes: `TechnicalQaHandler` accepts `{ videoVersionId, renderResult }`, verifies the
+  version, asset rows, output asset and persisted manifest hash/content with
+  `ManifestHasher`, runs QA, and writes structured `qa_json` with passed/errors/warnings,
+  manifest hash, duration and checked time. A passing report sets `awaiting_review`; a
+  failing report sets `qa_failed` and returns `QA_FAILED`; missing tools, invalid payloads,
+  missing assets or manifest mismatches set `blocked`. The rendered output asset is never
+  deleted or replaced on failure. The worker registers the handler plus local storage and
+  the process runner; no paid provider is involved.
+- Notes: the integration test builds a template-only path with `MockScriptPlanner`,
+  `ScriptValidator`, `UploadedVoiceProvider` (already licensed uploaded narration refs),
+  and `TimelineCompiler`, then injects a technical-QA result to prove the
+  `awaiting_review` transition on real PostgreSQL. It does not claim native FFmpeg
+  execution or a rendered MP4. The real-media `TechnicalQaTests` are skipped because
+  FFmpeg/FFprobe and a Thai-capable font are absent; the compile/render/voice worker
+  handlers and full end-to-end pipeline remain T15 work.
+
 ### T06
 Created: `src/ContentFactory.Infrastructure/Jobs/PostgresJobStore.cs`,
 `Jobs/OutboxDispatcher.cs`, `Jobs/LeaseWatchdog.cs`,
@@ -604,6 +659,22 @@ version, renderer version and font fingerprint for future invalidation. ASS is a
 burn-in input only; SRT is stored as the subtitle asset. No database migration, worker
 wiring, paid provider call or publication was added. Real media verification is blocked
 in this checkout because FFmpeg, FFprobe and a Thai-capable font are absent.
+
+### T12
+Created: `src/ContentFactory.Infrastructure/Media/TechnicalQa.cs`,
+`src/ContentFactory.Worker/Handlers/TechnicalQaHandler.cs`,
+`tests/ContentFactory.MediaTests/TechnicalQaTests.cs`,
+`tests/ContentFactory.IntegrationTests/ReviewReadyTests.cs`,
+`tests/ContentFactory.UnitTests/TechnicalQaLogicTests.cs`.
+Modified: `src/ContentFactory.Worker/Program.cs` (local storage, process runner, technical
+QA and handler DI), `docs/decisions.md` (ADR-0015), `docs/progress.md`.
+
+Notes: no database migration was added. QA reports are persisted as structured JSON in
+`video_versions.qa_json`; status transitions are `building -> awaiting_review` on pass and
+`building -> qa_failed` on media failure. Tool/payload/manifest/asset failures leave the
+row `blocked` with a readable error. The output asset is retained for debugging and
+retention. The handler is registered in the worker, but the compile/render/voice handlers
+and end-to-end pipeline remain T15 work. No paid API or publication was made.
 
 ### T04
 Created: `src/ContentFactory.Infrastructure/Media/SafeProcessRunner.cs`,

@@ -17,7 +17,7 @@ test evidence.
 - M0 (T00–T05) is complete and was reviewed by the owner.
 - Milestone M1: T06–T12 (durable jobs, worker orchestration, local script planning,
   budget/approval controls, narration, timeline/render, technical QA and review).
-- T00–T09 are complete; T10 is next. Stop at the M1 gate and report for owner review.
+- T00–T12 are complete. Stop at the M1 gate and report for owner review before T13.
 - Do not start M2+ work until the owner reviews M1.
 
 ## Safety rails

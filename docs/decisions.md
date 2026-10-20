@@ -333,3 +333,38 @@ this file explains local choices and their consequences.
   did not include a configuration loader. Moving it to versioned JSON later must preserve
   the same manifest fields and invalidation behavior. `SafeProcessRunner` now implements
   `IProcessRunner`; its argument-list and environment-allowlist behavior is unchanged.
+
+## ADR-0015 — Technical QA runs on the actual render, binds the exact manifest and keeps invalid output
+
+- Date: 2026-10-21
+- Status: accepted
+- Context: T12 must validate a rendered video before it can move to owner review. The
+  check must use the real media streams, not the renderer's declared metadata, because a
+  renderer bug or an interrupted write could produce an invalid file. It must also bind the
+  exact manifest identity, so a QA result cannot be reused for a different script, template
+  or font version. Invalid output must remain available for debugging under retention rules;
+  deleting it and claiming success is not allowed.
+- Decision: `TechnicalQa` is the sole implementation of `ITechnicalQa`. It copies the
+  content-addressed video asset to a UUID temp path and runs FFprobe and FFmpeg against the
+  real bytes. It reports errors for: corrupt or unreadable files, missing audio, wrong
+  dimensions/codecs/pixel format, out-of-range duration, A/V duration drift over 200 ms,
+  decode failure, silent narration, and malformed or overflowing SRT cues. Black frames are
+  reported as warnings because intentional title or end cards are allowed by the template;
+  they never turn a failed clip into a pass and they never alone fail an otherwise valid
+  clip.
+- Decision: `TechnicalQaHandler` is the worker stage that calls `ITechnicalQa`. It
+  deserializes a payload of `{ videoVersionId, renderResult }`, loads the video version
+  from PostgreSQL, verifies that the asset rows exist, that the output asset id matches, and
+  that the persisted manifest JSON hashes to the same SHA-256 as the render result. It
+  writes structured `qa_json` with passed/errors/warnings, manifest hash, duration and
+  checked time. On pass it sets `awaiting_review`; on a failing QA report it sets
+  `qa_failed` and returns `QA_FAILED`; on tool unavailability, invalid payloads, missing
+  assets or manifest mismatches it sets `blocked`. The rendered video/thumbnail/subtitle
+  assets are never deleted on failure.
+- Consequences: a video version only reaches `awaiting_review` when the stored bytes match
+  the approved manifest. The QA report is durable, readable and contains stable error codes,
+  so a later owner review and export can trust it. T12 adds no database migration and does
+  not wire the full compile/render/voice pipeline; that end-to-end orchestration is T15. In
+  this checkout FFmpeg/FFprobe and a Thai-capable font are absent, so the real-media QA
+  fixtures are skipped; the reported counts do not claim a rendered MP4 passed QA. No paid
+  API, credential, cloud upload or publication was used.
