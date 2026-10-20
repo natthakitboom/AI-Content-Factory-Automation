@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://content-factory.local/schemas/script-document.v1.schema.json",
+  "title": "ScriptDocument v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "revisionId",
+    "locale",
+    "title",
+    "disclosure",
+    "captionText",
+    "scenes"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "revisionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "locale": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 32
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "disclosure": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "captionText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "scenes": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 6,
+      "items": {
+        "$ref": "#/$defs/scene"
+      }
+    }
+  },
+  "$defs": {
+    "scene": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sceneId",
+        "role",
+        "narration",
+        "caption",
+        "claimIds"
+      ],
+      "properties": {
+        "sceneId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "hook",
+            "benefit",
+            "demo",
+            "cta"
+          ]
+        },
+        "narration": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "caption": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "claimIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "preferredAssetId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "motionPrompt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 1000
+        }
+      }
+    }
+  }
+}

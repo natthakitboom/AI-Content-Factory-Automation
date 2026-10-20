@@ -154,3 +154,32 @@ this file explains local choices and their consequences.
   refund or a provider-cancellation command, and it does not kill in-flight cloud requests.
   The cloud in-flight count is a pre-lease gate plus an in-process semaphore, not an
   exactly-once provider guarantee; provider reconciliation remains a separate concern.
+
+## ADR-0011 — Local script generation is untrusted until validated
+
+- Date: 2026-10-20
+- Status: accepted
+- Context: LM Studio is a local text source, not an authority on product facts. A product
+  title, description or claim can contain text that looks like an instruction, and a model
+  can return malformed JSON, unknown claim IDs, duplicate scene IDs, HTML/SSML or a
+  partial response. Invalid output must never reach a paid TTS or video call.
+- Decision: `LmStudioScriptPlanner` accepts only a loopback HTTP(S) base URL with no
+  userinfo, query or fragment; the model ID, output limit and timeout come from
+  configuration and are never guessed or downloaded. The system prompt is a fixed embedded
+  resource. Product facts and the request are serialised into a separate user message
+  explicitly marked as untrusted data, so text inside them cannot change the instructions.
+  Requests go to `/v1/chat/completions` with `response_format=json_object`; no tools, MCP
+  definitions or client secrets are sent in the body. A configured local token is sent only
+  as an `Authorization` header. The response content may be an object or a JSON string.
+  Parsing rejects unmapped fields, then `ScriptValidator` enforces schemaVersion 1, 3–6
+  scenes, unique scene IDs, allowed roles, known claim IDs, claims on benefit/demo scenes,
+  known preferred assets, at most one motion scene, and plain text narration/caption.
+  At most one repair request is allowed with the validation errors; a second failure is
+  blocked as `SCRIPT_INVALID`. Truncated, refused, timed-out or unavailable responses are
+  blocked without a blind retry. `MockScriptPlanner` is the offline default.
+- Consequences: an unknown claim or schema-invalid script cannot pass the planner gate, and
+  the adapter exposes the configured prompt version, model ID and any token usage in a
+  `ScriptPlanTrace` without inventing values. The plan schema has no token-usage column, so
+  no migration was added; a later plan-script handler can persist the available trace when
+  it writes the revision. A live LM Studio smoke test remains an environmental blocker and
+  is not claimed as passed.
