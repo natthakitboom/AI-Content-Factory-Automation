@@ -296,6 +296,11 @@ this file explains local choices and their consequences.
   ends on the frame grid and the manifest's durations remain contiguous. The manifest
   records the canonical script hash, template version, renderer version and font
   fingerprint.
+- Decision: there is no built-in font fingerprint. `TimelineOptions` and
+  `EncoderProbeOptions` require a lowercase 64-character SHA-256 value, and
+  `FontFingerprintIdentity.ComputeFromFile` hashes the licensed font file that will
+  actually be burned in. A missing or malformed fingerprint fails before a render starts.
+  Tests use a synthetic 64-hex value and do not claim it identifies a real font.
 - Decision: `CaptionLayout` wraps by grapheme cluster, never by UTF-8 byte count, limits a
   caption to two lines and 100 ms padding, and escapes ASS control characters so model
   text is rendered literally. Literal backslashes get a word joiner after them because ASS
