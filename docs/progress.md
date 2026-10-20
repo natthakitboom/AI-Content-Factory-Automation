@@ -14,7 +14,7 @@ M1 — T06–T12 (T08 complete; T09 next)
 | T05 | done | 5b8c780 | `make build` → 0 warnings/0 errors; `make test-unit` → 31 passed; filtered `CampaignRunTests` → 5 passed; `make test-integration` → 28 passed | M0 gate reached; media/live gates still blocked (FFmpeg, LM Studio, Node 24) |
 | T06 | done | d68ad34 | `make build` → 0 warnings/0 errors; `make test-unit` → 31 passed; filtered `JobLeasingTests` → 7 passed; `make test-integration` → 35 passed; 100-job two-worker finalization test passed | No FFmpeg/LM Studio needed; provider uncertainty is blocked for reconciliation, not retried |
 | T07 | done | 16c1d6f | `make build` → 0 warnings/0 errors; `make test-unit` → 37 passed; filtered `WorkflowTests` → 6 passed; `make test-integration` → 40 passed; filtered `WorkerRecoveryTests` → 5 passed; no pending model changes | No FFmpeg/LM Studio needed; no provider calls; pause does not cancel running cloud work |
-| T08 | done | 0a1ee43 | `make build` → 0 warnings/0 errors; `make test-unit` → 47 passed; filtered `ScriptValidationTests` → 10 passed; `make test-integration` → 55 passed; filtered `PlannerAdapterTests` → 15 passed; no pending model changes | Live LM Studio smoke blocked; fake HTTP tests passed; no paid calls; token usage is captured in `ScriptPlanTrace` because the plan schema has no token column |
+| T08 | done | 0a1ee43, 9d3616f | `make build` → 0 warnings/0 errors; `make test-unit` → 47 passed; filtered `ScriptValidationTests` → 10 passed; `make test-integration` → 56 passed; filtered `PlannerAdapterTests` → 16 passed; live LM Studio smoke → 2/2 validator-approved runs; no pending model changes | Live LM Studio remains an optional local gate (not CI); no paid calls; token usage is captured in `ScriptPlanTrace` because the plan schema has no token column |
 
 ## Last verified commands
 
@@ -250,36 +250,50 @@ snapshot, claim text or price is accepted as fact.
   `MarkupInCaptionRejected`, `UnknownAssetRejected`,
   `MockPlannerProducesValidatorApprovedScript`, `PromptAndSchemaFilesMatchD2`.
 - Command: `dotnet test tests/ContentFactory.IntegrationTests --filter PlannerAdapterTests`
-  → 15 passed, 0 failed, 0 skipped: `ConfiguredModelIdIsSentAndUsageCaptured`,
-  `JsonStringContentIsParsed`, `PromptInjectionTreatedAsData`,
-  `MalformedJsonRepairedAtMostOnce`, `InvalidClaimIsRepairedOnceBeforePassing`,
-  `UnknownJsonFieldIsRepairedOnce`, `SecondMalformedJsonBlocksAfterOneRepair`,
-  `LocalModelUnavailableReturnsBlocked`, `LocalModelHttp503ReturnsBlocked`,
-  `LocalModelTimeoutReturnsBlocked`, `TruncatedFinishReasonBlocksWithoutRepair`,
-  `ProviderRefusalBlocksWithoutRepair`, `PublicBaseUrlRejectedBeforeNetworkCall`,
-  `MissingModelIdBlocksBeforeNetworkCall`, `PromptVersionMismatchBlocksBeforeNetworkCall`.
+  → 16 passed, 0 failed, 0 skipped: `ConfiguredModelIdIsSentAndUsageCaptured`,
+  `ReasoningEffortNoneIsSent`, `JsonStringContentIsParsed`,
+  `PromptInjectionTreatedAsData`, `MalformedJsonRepairedAtMostOnce`,
+  `InvalidClaimIsRepairedOnceBeforePassing`, `UnknownJsonFieldIsRepairedOnce`,
+  `SecondMalformedJsonBlocksAfterOneRepair`, `LocalModelUnavailableReturnsBlocked`,
+  `LocalModelHttp503ReturnsBlocked`, `LocalModelTimeoutReturnsBlocked`,
+  `TruncatedFinishReasonBlocksWithoutRepair`, `ProviderRefusalBlocksWithoutRepair`,
+  `PublicBaseUrlRejectedBeforeNetworkCall`, `MissingModelIdBlocksBeforeNetworkCall`,
+  `PromptVersionMismatchBlocksBeforeNetworkCall`.
 - Command: `make test-unit` → 47 passed, 0 failed, 0 skipped.
-- Command: `make test-integration` → 55 passed, 0 failed, 0 skipped (15 planner adapter,
+- Command: `make test-integration` → 56 passed, 0 failed, 0 skipped (16 planner adapter,
   5 worker recovery, 7 job leasing, 5 campaign run, 8 asset ingest, 8 auth, 1 CLI,
   6 schema).
 - Command: `make build` → 0 warnings, 0 errors.
 - Command: `dotnet ef migrations has-pending-model-changes --project
   src/ContentFactory.Infrastructure --startup-project src/ContentFactory.Api`
   → "No changes have been made to the model since the last migration."
+- Command: temporary console referencing `ContentFactory.Infrastructure`, calling
+  `LmStudioScriptPlanner.GenerateWithTraceAsync` against `http://127.0.0.1:1234/v1`
+  with `qwen/qwen3.6-35b-a3b:2`, `LM_STUDIO_REASONING_EFFORT=none` and
+  `TEXT_MAX_OUTPUT_TOKENS=1536`.
+  - Run 1: 8.52s, 4 scenes, 1 repair, 2,299 prompt + 823 completion tokens.
+  - Run 2: 3.87s, 3 scenes, roles `hook,benefit,cta`, 0 repairs,
+    911 prompt + 390 completion tokens.
+  - Both outputs passed `ScriptValidator`; no paid API, model download or credential.
 - Environment: macOS arm64, .NET SDK 10.0.402 (user-local), PostgreSQL 18 in Docker at
   `127.0.0.1:54329`, `cf_test_<runid>` databases. Planner adapter tests used an in-process
-  fake HTTP handler; no LM Studio process, paid API or network AI call was made.
-  Verified 2026-10-20T16:05:00Z.
+  fake HTTP handler; the live smoke used LM Studio running on loopback.
+  Verified 2026-10-20T16:13:00Z.
 - Notes: the LM Studio base URL must be loopback and credential-free; the model ID comes
   only from configuration. Product facts are sent as a separate untrusted JSON message and
-  the system prompt is a fixed embedded resource. The adapter parses object or JSON-string
-  content, rejects unmapped fields, refuses tools/MCP/client secrets in the body, and sends
-  a configured local token only in the `Authorization` header. One repair is allowed;
-  malformed JSON or a failed business validation after that is `SCRIPT_INVALID`. Truncated,
-  refused, timed-out and unavailable responses are blocked without a blind retry. The
-  `ScriptPlanTrace` exposes prompt version, configured model ID and any response token
-  usage; the plan schema has no token-usage column, so no migration was invented. A live
-  LM Studio smoke test remains blocked because LM Studio is unreachable.
+  the system prompt is a fixed embedded resource. Requests use `response_format` type
+  `json_schema` built from the embedded `script-document.v1.schema.json`; LM Studio rejects
+  the older `json_object` type with HTTP 400. `LM_STUDIO_REASONING_EFFORT` is optional and is
+  sent only when configured; `none` disables Qwen3.6 thinking, which otherwise consumed
+  1,801 reasoning tokens and truncated a 2,048-token run. The adapter parses object or
+  JSON-string content, rejects unmapped fields, refuses tools/MCP/client secrets in the
+  body, and sends a configured local token only in the `Authorization` header. One repair is
+  allowed; malformed JSON or a failed business validation after that is `SCRIPT_INVALID`.
+  Truncated, refused, timed-out and unavailable responses are blocked without a blind retry.
+  The `ScriptPlanTrace` exposes prompt version, configured model ID and any response token
+  usage; the plan schema has no token-usage column, so no migration was invented. The live
+  LM Studio smoke is an optional local gate, not a CI dependency; CI still uses the fake
+  HTTP handler and the mock provider.
 
 ### T06
 Created: `src/ContentFactory.Infrastructure/Jobs/PostgresJobStore.cs`,
@@ -337,16 +351,18 @@ Created: `src/ContentFactory.Core/Campaigns/ScriptValidator.cs`,
 `tests/ContentFactory.UnitTests/ScriptValidationTests.cs`,
 `tests/ContentFactory.IntegrationTests/PlannerAdapterTests.cs`.
 Modified: `src/ContentFactory.Infrastructure/ContentFactory.Infrastructure.csproj`
-(embedded prompt resource), `docs/decisions.md` (ADR-0011), `docs/progress.md`.
+(embedded prompt and schema resources), `.env.example` (`LM_STUDIO_REASONING_EFFORT`),
+`docs/decisions.md` (ADR-0011), `docs/progress.md`.
 
 Notes: the validator is provider-independent and enforces schemaVersion 1, 3–6 scenes,
 unique scene IDs, allowed roles, known claim IDs, claims on benefit/demo scenes, known
 preferred assets, at most one motion scene, and plain narration/caption text. The LM Studio
-adapter only calls a loopback endpoint, sends the configured model ID, keeps product facts
-as a separate untrusted user message, rejects unmapped JSON fields, and allows exactly one
-repair. The mock planner is deterministic and offline; `TEXT_PROVIDER=mock` remains the
-development default. No real LM Studio request, paid API, model download or credential was
-used.
+adapter only calls a loopback endpoint, sends the configured model ID and embedded JSON
+Schema, keeps product facts as a separate untrusted user message, rejects unmapped JSON
+fields, and allows exactly one repair. `LM_STUDIO_REASONING_EFFORT=none` is recommended for
+Qwen3.6 to disable hidden thinking and keep latency/heat down. The mock planner is
+deterministic and offline; `TEXT_PROVIDER=mock` remains the development default. Only local
+loopback requests were made; no paid API, model download or credential was used.
 
 ### T04
 Created: `src/ContentFactory.Infrastructure/Media/SafeProcessRunner.cs`,
@@ -471,6 +487,6 @@ it was not moved or rewritten.
 - Prerequisite: T01, T06. Keep `ALLOW_PAID_APIS=false`, `AUTO_PUBLISH=false` and
   `PUBLISHING_MODE=manual_export`; no paid provider may be called while the envelope is
   absent or expired.
-- Remaining blockers: FFmpeg/FFprobe missing, LM Studio unreachable, Node 26.11.1 vs
-  pinned 24.22.0, and port 3000 occupied. T08's live LM Studio smoke test is blocked; its
-  fake-HTTP adapter and validator tests passed.
+- Remaining blockers: FFmpeg/FFprobe missing, Node 26.11.1 vs pinned 24.22.0, and port
+  3000 occupied. T08's live LM Studio smoke passed locally and remains an optional gate;
+  its fake-HTTP adapter and validator tests passed.
