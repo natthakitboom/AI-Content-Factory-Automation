@@ -1,0 +1,17 @@
+{
+  "streams": [
+    {
+      "codec_type": "audio",
+      "codec_name": "mp3",
+      "duration": "1.234000",
+      "channels": 2,
+      "sample_rate": "24000"
+    }
+  ],
+  "format": {
+    "filename": "recorded-narration.mp3",
+    "format_name": "mp3",
+    "duration": "1.234000",
+    "size": "19840"
+  }
+}

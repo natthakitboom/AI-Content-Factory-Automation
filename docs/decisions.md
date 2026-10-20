@@ -237,3 +237,43 @@ this file explains local choices and their consequences.
   should use a new approval id. No paid request, provider adapter or publication was
   created by this task. API mappings are 403 for disabled/approval failures and 409 for
   stale prices or exhausted budgets.
+
+## ADR-0013 — Narration is probed, cached by content identity and paid through the video guard
+
+- Date: 2026-10-21
+- Status: accepted
+- Context: T10 must support owner-uploaded narration without forcing a TTS purchase, and
+  optionally Azure Speech REST. A provider response, uploaded file, cache entry or model
+  text cannot be trusted to define timing or to prove that usable narration exists. The
+  plan requires phrase-level timing, a stable cache key, the same paid-work controls as
+  video, and no silent success when narration is missing.
+- Decision: `UploadedVoiceProvider` resolves an immutable audio `AssetRef` from a
+  deterministic operation-id mapping (`voice:<revision>:<scene>` or
+  `voice:<revision>:<scene>:p<phraseIndex>`), checks locale and an optional approved text
+  hash, and never synthesizes a substitute. `AzureSpeechVoiceProvider` only runs when
+  `ALLOW_PAID_APIS=true` and its explicit `EnableSynthesis` flag is set; it fetches the
+  allowed voice list from the configured endpoint, requires an exact voice ID and matching
+  locale, builds SSML with `XmlWriter` so model text is escaped, obtains a verified quote
+  from `PriceSnapshotService`, reserves with `IBudgetGuard` using the campaign and
+  video/revision scope, and settles only after storing a valid audio asset. A definite
+  HTTP 400/401/403/404/422 releases the reservation; a 5xx, timeout, malformed response or
+  empty audio is uncertain and keeps it. `IPaidVoiceProvider.SynthesizePaidAsync` is the
+  only path that can authorize a paid call; the unscoped interface method rejects paid
+  providers.
+  `VoiceAssembler` splits plain narration only at sentence punctuation or whitespace
+  (never inside a grapheme or word), measures every phrase and combined scene with
+  `FfprobeAudioProbe`, rejects missing streams, zero duration and silent audio, and adds
+  the 100 ms caption padding without exceeding the measured scene duration. Phrase
+  mappings and scene segments are recorded in a canonical `VoiceManifest`. The cache key
+  is SHA-256 over the text hash, voice ID, locale, synthesis config hash and provider
+  version; `FileVoiceAssetCache` stores only the immutable asset reference under
+  `DATA_ROOT/voice-cache`, so a restart does not pay twice and uploaded narration needs no
+  reservation.
+- Consequences: T10 adds no database migration and does not wire a worker stage; T11 can
+  consume `VoiceSegment.DurationMs` and the phrase timings. A missing or silent file is a
+  failed/blocked result, not an empty audio asset. The paid path requires an operator to
+  configure a verified speech price snapshot and approval envelope; with no snapshot the
+  live mode blocks before any Azure HTTP request. The demo WAV/tone used by adapter tests
+  is synthetic transport data and is not production narration acceptance. Actual FFprobe/
+  FFmpeg probing and concatenation remain blocked in this checkout because those binaries
+  are not installed.

@@ -9,7 +9,7 @@ namespace ContentFactory.Infrastructure.Billing;
 /// Quotes a paid operation from an explicit, verified price snapshot. The quote includes
 /// the pilot reservation margin; callers must not invent a price or reuse an expired one.
 /// </summary>
-public sealed class PriceSnapshotService
+public sealed class PriceSnapshotService : IVoicePriceQuoter
 {
     private readonly AppDbContext _db;
     private readonly BudgetOptions _options;

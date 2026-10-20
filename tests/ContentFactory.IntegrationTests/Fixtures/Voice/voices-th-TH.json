@@ -1,0 +1,11 @@
+[
+  {
+    "Name": "Microsoft Server Speech Text to Speech Voice (th-TH, PremwadeeNeural)",
+    "ShortName": "th-TH-PremwadeeNeural",
+    "Gender": "Female",
+    "Locale": "th-TH",
+    "SampleRateHertz": "24000",
+    "VoiceType": "Neural",
+    "Status": "GA"
+  }
+]
