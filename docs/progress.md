@@ -13,7 +13,7 @@ M1 — T06–T12 (T07 complete; T08 next)
 | T04 | done | 52c61eb | `make build` → 0 warnings/0 errors; `make test-unit` → 31 passed; filter `SafeProcessTests|ManifestHashTests` → 13 passed; `make test-integration` → 23 passed | No FFmpeg needed; media/live gates remain blocked |
 | T05 | done | 5b8c780 | `make build` → 0 warnings/0 errors; `make test-unit` → 31 passed; filtered `CampaignRunTests` → 5 passed; `make test-integration` → 28 passed | M0 gate reached; media/live gates still blocked (FFmpeg, LM Studio, Node 24) |
 | T06 | done | d68ad34 | `make build` → 0 warnings/0 errors; `make test-unit` → 31 passed; filtered `JobLeasingTests` → 7 passed; `make test-integration` → 35 passed; 100-job two-worker finalization test passed | No FFmpeg/LM Studio needed; provider uncertainty is blocked for reconciliation, not retried |
-| T07 | done | pending | `make build` → 0 warnings/0 errors; `make test-unit` → 37 passed; filtered `WorkflowTests` → 6 passed; `make test-integration` → 40 passed; filtered `WorkerRecoveryTests` → 5 passed; no pending model changes | No FFmpeg/LM Studio needed; no provider calls; pause does not cancel running cloud work |
+| T07 | done | 16c1d6f | `make build` → 0 warnings/0 errors; `make test-unit` → 37 passed; filtered `WorkflowTests` → 6 passed; `make test-integration` → 40 passed; filtered `WorkerRecoveryTests` → 5 passed; no pending model changes | No FFmpeg/LM Studio needed; no provider calls; pause does not cancel running cloud work |
 
 ## Last verified commands
 
