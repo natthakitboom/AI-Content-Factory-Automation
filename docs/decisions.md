@@ -368,3 +368,38 @@ this file explains local choices and their consequences.
   this checkout FFmpeg/FFprobe and a Thai-capable font are absent, so the real-media QA
   fixtures are skipped; the reported counts do not claim a rendered MP4 passed QA. No paid
   API, credential, cloud upload or publication was used.
+
+## ADR-0016 — Cloud video submission uses exact fal D6 request, holds budget on uncertain outcome and never retries the POST blindly
+
+- Date: 2026-10-21
+- Status: accepted
+- Context: T13 sends image-to-video requests to fal.ai. A paid cloud request is
+  billable once the provider accepts it, so the local adapter must not invent fields,
+  must normalize the image before exposing it, must persist an attempt before the POST,
+  and must treat a dropped connection as an uncertain outcome rather than a failure that
+  can be retried automatically.
+- Decision: The fal adapter sends the exact D6 schema to
+  `https://queue.fal.run/fal-ai/wan/v2.2-a14b/image-to-video/turbo` with
+  `Authorization: Key <FAL_KEY>`. `FalRequestBuilder` decodes the source image with
+  SkiaSharp, resizes the long edge to at most 1280 px, re-encodes as JPEG to strip
+  metadata, and refuses inputs that exceed the 3 MiB pre-base64 or 5 MiB request-body
+  caps. The request body contains only `image_url`, `prompt`, `resolution`,
+  `aspect_ratio`, `enable_safety_checker`, `enable_output_safety_checker`,
+  `enable_prompt_expansion`, `acceleration`, `video_quality` and `video_write_mode`.
+  No `duration`, no invented parameters and no local path are ever sent.
+- Decision: `SubmitVideoHandler` is idempotent. It looks up `provider_requests` by the
+  client operation id and returns the existing outcome if a row was already written. For
+  a new attempt it verifies the asset row exists, checks `CloudUseAllowed`, reserves the
+  budget, writes a `prepared` row, moves it to `submitting`, and only then performs the
+  HTTP POST. A dropped connection or ambiguous HTTP status results in
+  `SubmissionUnknownException`, a `submission_unknown` row and a `SUBMISSION_UNKNOWN`
+  job failure while the budget reservation stays held for owner reconciliation. A
+  definitive 4xx client error results in `ProviderRejectedException`, a
+  `failed_confirmed` row, and a released reservation. There is no generic retry policy
+  around the billable POST.
+- Consequences: the system cannot double-submit a scene because the provider request row
+  is the fence. An uncertain submission does not lose money or create a fake success; it
+  surfaces a stable error code and waits for human reconciliation. The adapter depends on
+  SkiaSharp for image normalization and adds `cancel_url` to `provider_requests` for T14.
+  No real FAL_KEY, paid call, credential, public URL or publication was used in
+  development or tests.

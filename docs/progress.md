@@ -1,7 +1,7 @@
 # Development progress
 
 ## Current milestone
-M1 — T06–T12 (T12 complete; M1 gate review next)
+M1 — T06–T13 (T13 complete; T14 next)
 
 ## Task status
 | Task | Status | Commit | Evidence | Blocker |
@@ -19,6 +19,7 @@ M1 — T06–T12 (T12 complete; M1 gate review next)
 | T10 | done | 6bd8282 | `make build` → 0 warnings/0 errors; `make test-unit` → 73 passed; `make test-integration` → 82 passed; filtered `VoiceManifestTests` → 17 passed; filtered `VoiceProviderTests` → 11 passed; no pending model changes; `make test-media` → exit 2 blocked | No live Azure/paid calls; real FFprobe/FFmpeg execution blocked because the binaries are missing; adapter is not yet wired to a worker stage (T12) |
 | T11 | done | 5383f60, 3535607, 66f5820 | `make build` → 0 warnings/0 errors; `make test-unit` → 87 passed; filtered `TimelineTests` → 14 passed; `make test-integration` → 82 passed; filtered `RenderGoldenTests` → 3 skipped; `make test-media` → exit 2 blocked; no pending model changes | FFmpeg/FFprobe and a Thai-capable font are missing, so no native MP4 or golden frame was produced; renderer/compiler is not wired to a worker stage until T12 |
 | T12 | done | c94ff42 | `make build` → 0 warnings/0 errors; `make test-unit` → 95 passed; filtered `TechnicalQaLogicTests` → 8 passed; `make test-integration` → 86 passed; filtered `ReviewReadyTests` → 4 passed; filtered `TechnicalQaTests` → 6 skipped; `make test-media` → exit 2 blocked; no pending model changes | FFmpeg/FFprobe and a Thai-capable font are missing, so the real-media QA suite was skipped and no MP4 QA pass was claimed; compile/render/voice worker handlers remain unwired until T15 |
+| T13 | done | 4a065a3 | `make build` → 0 warnings/0 errors; `make test-unit` → 95 passed; `make test-integration` → 93 passed; filtered `FalSubmitTests` → 7 passed; `make test-media` → exit 2 blocked; `dotnet ef migrations has-pending-model-changes` → no changes | No real FAL_KEY or paid call was made; the adapter is wired against a fake fal queue server; live mode remains closed |
 
 ## Last verified commands
 
@@ -675,6 +676,66 @@ Notes: no database migration was added. QA reports are persisted as structured J
 row `blocked` with a readable error. The output asset is retained for debugging and
 retention. The handler is registered in the worker, but the compile/render/voice handlers
 and end-to-end pipeline remain T15 work. No paid API or publication was made.
+
+### T13
+Created: `src/ContentFactory.Infrastructure/Providers/Fal/FalOptions.cs`,
+`src/ContentFactory.Infrastructure/Providers/Fal/FalRequestBuilder.cs`,
+`src/ContentFactory.Infrastructure/Providers/Fal/FalVideoProvider.cs`,
+`src/ContentFactory.Worker/Handlers/SubmitVideoHandler.cs`,
+`src/ContentFactory.Core/Exceptions/SubmissionUnknownException.cs`,
+`src/ContentFactory.Core/Exceptions/ProviderRejectedException.cs`,
+`docs/provider-contracts/fal-wan-turbo.input.schema.json`,
+`tests/ContentFactory.IntegrationTests/FalSubmitTests.cs`.
+Modified: `src/ContentFactory.Worker/Program.cs` (fal DI and handler),
+`Directory.Packages.props` and project files (`SkiaSharp`, `Microsoft.Extensions.Http`),
+`src/ContentFactory.Infrastructure/Persistence/Entities/ProviderRequest.cs`,
+`src/ContentFactory.Infrastructure/Persistence/AppDbContext.cs`, migration
+`AddProviderRequestCancelUrl`, `docs/progress.md`, `docs/decisions.md`,
+`docs/START_HERE_DEEPSEEK.md`.
+
+- Command: `make build` (before implementation)
+  - RED: build failed with `CS0246` because `FalVideoProvider`, `FalRequestBuilder`,
+    `SubmitVideoHandler`, `SubmissionUnknownException` and `ProviderRejectedException` did
+    not exist, and the test referenced the `Fal` provider namespace.
+- Command: `make build` → 0 warnings, 0 errors.
+- Command: `make test-unit` → 95 passed, 0 failed, 0 skipped.
+- Command: `make test-integration` → 93 passed, 0 failed, 0 skipped.
+- Command: `dotnet test tests/ContentFactory.IntegrationTests --filter FalSubmitTests`
+  → 7 passed, 0 failed, 0 skipped:
+  `OnlySchemaFieldsAreSent`, `DurationParameterIsNeverInvented`, `SmallImageUsesDataUri`,
+  `CloudConsentRequired`, `TimeoutAfterAcceptanceIsUnknown`,
+  `ProviderKeyNeverReachesBrowser`, `ReplayAfterUnknownDoesNotResubmit`.
+- Command: `make test-media` → exit 2, blocked: "FFmpeg/FFprobe are not installed;
+  media tests are blocked (not passed)."
+- Command: `dotnet ef migrations has-pending-model-changes --project
+  src/ContentFactory.Infrastructure --startup-project src/ContentFactory.Api --no-build`
+  → "No changes have been made to the model since the last migration."
+- Environment: macOS arm64, .NET SDK 10.0.402 (user-local), PostgreSQL 18 in Docker at
+  `127.0.0.1:54329`, `cf_test_<runid>` databases. Verified 2026-10-21T00:06:31Z.
+- Notes: `FalVideoProvider` posts the exact D6 request to
+  `https://queue.fal.run/fal-ai/wan/v2.2-a14b/image-to-video/turbo` with `Authorization:
+  Key <FAL_KEY>`. `FalRequestBuilder` normalizes the source image with SkiaSharp to a
+  JPEG data URI, caps the long edge at 1280 px, strips metadata, and enforces the 3 MiB
+  pre-base64 and 5 MiB request-body caps. The request contains only the D6 fields:
+  `image_url`, `prompt`, `resolution`, `aspect_ratio`, `enable_safety_checker`,
+  `enable_output_safety_checker`, `enable_prompt_expansion`, `acceleration`,
+  `video_quality`, `video_write_mode`. No `duration` or invented parameter is sent.
+- Notes: `SubmitVideoHandler` is idempotent. It looks up an existing `provider_requests`
+  row by `ClientOperationId` and does not POST again if one already exists. For a new
+  attempt it verifies the source asset exists, that `CloudUseAllowed` is true, reserves
+  the budget, persists a `prepared` provider attempt, and only then calls
+  `IVideoProvider.SubmitAsync`. If the request is accepted by the server but the
+  connection drops before a response arrives, the row becomes `submission_unknown`, the
+  job returns `SUBMISSION_UNKNOWN`, and the budget reservation is held for owner
+  reconciliation. A definitive provider rejection marks the row `failed_confirmed` and
+  releases the reservation. No generic HTTP retry policy wraps the billable POST.
+- Notes: the `provider_requests` table gained a `cancel_url` column (migration
+  `20261020235805_AddProviderRequestCancelUrl`) for T14 cancellation. The worker DI now
+  registers `FalOptions`, the typed `HttpClient<IVideoProvider, FalVideoProvider>`,
+  `FalRequestBuilder` and `SubmitVideoHandler`. `ALLOW_PAID_APIS` remains false in
+  `.env.example`; the integration tests enable it only inside an in-memory budget options
+  instance with a local test approval file and a fake HTTP server. No real FAL_KEY, paid
+  call, credential, cloud upload or publication was made.
 
 ### T04
 Created: `src/ContentFactory.Infrastructure/Media/SafeProcessRunner.cs`,
