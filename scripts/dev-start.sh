@@ -34,7 +34,13 @@ dotnet build ContentFactory.slnx --nologo -v q >/dev/null
 export ASPNETCORE_URLS="http://127.0.0.1:5080"
 start api .run/api.log dotnet run --project src/ContentFactory.Api --no-build --no-launch-profile
 start worker .run/worker.log dotnet run --project src/ContentFactory.Worker --no-build --no-launch-profile
-if [ ! -d apps/dashboard/.next ]; then (cd apps/dashboard && npm ci --no-audit --no-fund >/dev/null && API_ORIGIN="http://127.0.0.1:5080" npm run build >/dev/null); fi
+# The API address is baked into the dashboard build, so rebuild whenever it differs from the last build
+# (for example after an end-to-end run, which builds against a different port).
+if [ "$(cat apps/dashboard/.next/api-origin 2>/dev/null)" != "http://127.0.0.1:5080" ]; then
+  echo "Building the dashboard for http://127.0.0.1:5080 ..."
+  (cd apps/dashboard && npm ci --no-audit --no-fund >/dev/null && API_ORIGIN="http://127.0.0.1:5080" npm run build >/dev/null)
+  echo "http://127.0.0.1:5080" > apps/dashboard/.next/api-origin
+fi
 (cd apps/dashboard && API_ORIGIN="http://127.0.0.1:5080" start dashboard .run/dashboard.log npm run start)
 
 echo
