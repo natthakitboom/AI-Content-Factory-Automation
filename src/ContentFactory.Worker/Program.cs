@@ -4,6 +4,7 @@ using ContentFactory.Infrastructure.Jobs;
 using ContentFactory.Infrastructure.Media;
 using ContentFactory.Infrastructure.Persistence;
 using ContentFactory.Infrastructure.Providers.Fal;
+using ContentFactory.Infrastructure.Security;
 using ContentFactory.Infrastructure.Storage;
 using ContentFactory.Worker;
 using ContentFactory.Worker.Handlers;
@@ -43,6 +44,18 @@ builder.Services.AddHttpClient<IVideoProvider, FalVideoProvider>();
 builder.Services.AddScoped<SubmitVideoHandler>();
 builder.Services.AddScoped<IJobHandler>(services =>
     services.GetRequiredService<SubmitVideoHandler>());
+builder.Services.AddSingleton<IHostAddressResolver, DnsHostAddressResolver>();
+builder.Services.AddSingleton(new SafeMediaDownloaderOptions());
+builder.Services.AddHttpClient<SafeMediaDownloader>()
+    .ConfigurePrimaryHttpMessageHandler(services =>
+        SafeMediaDownloader.CreateHandler(services.GetRequiredService<IHostAddressResolver>()));
+builder.Services.AddScoped<PollVideoHandler>();
+builder.Services.AddScoped<IJobHandler>(services =>
+    services.GetRequiredService<PollVideoHandler>());
+builder.Services.AddScoped<DownloadVideoHandler>();
+builder.Services.AddScoped<IJobHandler>(services =>
+    services.GetRequiredService<DownloadVideoHandler>());
+builder.Services.AddScoped<ProviderReconciler>();
 builder.Services.AddSingleton<ResourceGovernor>();
 builder.Services.AddScoped<PostgresJobStore>(services =>
     new PostgresJobStore(

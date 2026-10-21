@@ -403,3 +403,28 @@ this file explains local choices and their consequences.
   SkiaSharp for image normalization and adds `cancel_url` to `provider_requests` for T14.
   No real FAL_KEY, paid call, credential, public URL or publication was used in
   development or tests.
+
+## ADR-0017: Recovery of cloud generations and safe media ingest (T14)
+
+- Decision: poll and download jobs inherit the submit payload and resolve exactly one
+  `provider_requests` row by client operation id. They never call submit. Rows in
+  `prepared`, `submitting` or `submission_unknown`, or without queue references, are
+  blocked with `UNKNOWN_REQUIRES_RECONCILIATION`; only the owner can attach an existing
+  request id (URLs must be HTTPS on the queue host and end in `/requests/<id>[/status|/cancel]`)
+  or confirm no charge with a reason. Both write an audit event.
+- Decision: GET calls to the queue retry on 429, 5xx and network errors with Retry-After and
+  jitter, then fall back to "still in progress". The fal key is only sent to the configured
+  queue host. Cancel uses `PUT` (confirmed against fal docs) and does not release the
+  reservation; a failed generation also keeps it held. Release happens only through owner
+  no-charge confirmation, and a delivered output settles it at the price snapshot (`estimated`).
+- Decision: the signed output URL is never stored. Download re-polls the existing request,
+  refreshes once on 401/403/404/410, then streams into the content-addressed store.
+  `provider_requests.output_asset_id` plus hash dedupe makes a replay after a crash idempotent.
+- Decision: `SafeMediaDownloader` allows HTTPS port 443 on an explicit host allowlist
+  (`fal.media`, `fal.run` and subdomains; extend by configuration after observing real hosts),
+  rejects IP literals and userinfo, validates DNS for every redirect hop (max 3), denies
+  private/loopback/link-local/CGNAT/multicast ranges, caps 200 MiB and 180 s, and sends no
+  credentials. The production handler pins the connection to the validated address.
+- Consequences: the allowlist is a guess until a real output is seen; an unexpected host fails
+  closed. Live status/response JSON shapes were taken from the plan and docs, not exercised.
+

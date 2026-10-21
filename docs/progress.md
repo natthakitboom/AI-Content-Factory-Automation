@@ -1,7 +1,7 @@
 # Development progress
 
 ## Current milestone
-M1 — T06–T13 (T13 complete; T14 next)
+M1 — T06–T14 (T14 complete; T15 next)
 
 ## Task status
 | Task | Status | Commit | Evidence | Blocker |
@@ -20,8 +20,45 @@ M1 — T06–T13 (T13 complete; T14 next)
 | T11 | done | 5383f60, 3535607, 66f5820 | `make build` → 0 warnings/0 errors; `make test-unit` → 87 passed; filtered `TimelineTests` → 14 passed; `make test-integration` → 82 passed; filtered `RenderGoldenTests` → 3 skipped; `make test-media` → exit 2 blocked; no pending model changes | FFmpeg/FFprobe and a Thai-capable font are missing, so no native MP4 or golden frame was produced; renderer/compiler is not wired to a worker stage until T12 |
 | T12 | done | c94ff42 | `make build` → 0 warnings/0 errors; `make test-unit` → 95 passed; filtered `TechnicalQaLogicTests` → 8 passed; `make test-integration` → 86 passed; filtered `ReviewReadyTests` → 4 passed; filtered `TechnicalQaTests` → 6 skipped; `make test-media` → exit 2 blocked; no pending model changes | FFmpeg/FFprobe and a Thai-capable font are missing, so the real-media QA suite was skipped and no MP4 QA pass was claimed; compile/render/voice worker handlers remain unwired until T15 |
 | T13 | done | 4a065a3 | `make build` → 0 warnings/0 errors; `make test-unit` → 95 passed; `make test-integration` → 93 passed; filtered `FalSubmitTests` → 7 passed; `make test-media` → exit 2 blocked; `dotnet ef migrations has-pending-model-changes` → no changes | No real FAL_KEY or paid call was made; the adapter is wired against a fake fal queue server; live mode remains closed |
+| T14 | done | (this commit) | `make build` → 0 warnings/0 errors; `make test-unit` → 95 passed; `make test-integration` → 113 passed; filtered `ProviderRecoveryTests` → 20 passed; `make test-media` → exit 2 blocked; no pending model changes; `make migrate` applied `AddProviderRequestOutputAsset` | No real FAL_KEY, DNS lookup or paid call; everything ran against a fake network. Cancel verb PUT confirmed against fal docs; live behaviour of status/response/cancel remains unverified until an approved live smoke |
 
 ## Last verified commands
+
+### T14
+Created: `src/ContentFactory.Worker/Handlers/PollVideoHandler.cs`, `DownloadVideoHandler.cs`,
+`ProviderJobPayload.cs`, `src/ContentFactory.Infrastructure/Providers/Fal/ProviderReconciler.cs`,
+`src/ContentFactory.Infrastructure/Security/SafeMediaDownloader.cs`,
+`SafeMediaDownloaderOptions.cs`, `IHostAddressResolver.cs`,
+`src/ContentFactory.Core/Exceptions/MediaUrlExpiredException.cs`,
+`src/ContentFactory.Cli/Commands/ReconcileCommand.cs`, migration
+`AddProviderRequestOutputAsset`, `tests/ContentFactory.IntegrationTests/ProviderRecoveryTests.cs`.
+Modified: `FalVideoProvider` (poll/cancel), `FalOptions`, `ProviderRequest` +
+`AppDbContext` (`output_asset_id`), Worker `Program.cs`, Cli `Program.cs`.
+
+- RED: `dotnet build tests/ContentFactory.IntegrationTests` → 5 × `CS0246` (`PollVideoHandler`,
+  `DownloadVideoHandler`, `ProviderReconciler`, `SafeMediaDownloader`, `IHostAddressResolver`
+  did not exist).
+- GREEN: `dotnet test tests/ContentFactory.IntegrationTests --filter ProviderRecoveryTests`
+  → 20 passed, 0 failed, 0 skipped (named tests `InProgressPollReschedules`,
+  `CompletedResultDownloadedOnce`, `RedirectToPrivateIpRejected`,
+  `SignedUrlRefreshUsesExistingRequest`, `CancelledDoesNotImplyRefund`,
+  `UnknownCannotAutoFallback`, plus 429/5xx Retry-After, delayed > 30 min, restart
+  dedupe, oversize, no credentials to media host, unapproved URL theory, reconcile attach /
+  reject / no-charge).
+- `make build` → 0 warnings, 0 errors. `make test-unit` → 95 passed. `make test-integration`
+  → 113 passed. `make test-media` → exit 2, blocked (FFmpeg/FFprobe not installed).
+  `dotnet ef migrations has-pending-model-changes` → no changes.
+- Environment: macOS arm64, .NET SDK 10.0.402, PostgreSQL 18 in Docker at `127.0.0.1:54329`.
+  Verified 2026-10-21.
+- Notes: poll failures (429/5xx/network) retry with Retry-After + jitter and then only
+  reschedule; they never submit. Uncertain rows (`prepared`/`submitting`/`submission_unknown`)
+  are blocked with `UNKNOWN_REQUIRES_RECONCILIATION`. Polling past 30 minutes reports
+  `PROVIDER_DELAYED` and continues at a slower interval. The signed output URL is never
+  stored; download re-reads it from the existing `response_url`.
+- Notes: owner CLI commands `reconcile-attach` and `reconcile-no-charge` (both audited) are
+  the only way out of UNKNOWN; cancel is a service method (`ProviderReconciler.RequestCancelAsync`)
+  and is not exposed by the CLI. Re-queuing a poll job after an attach is not automated and
+  belongs to T15's run wiring.
 
 ### T00
 - Command: `dotnet test tests/ContentFactory.UnitTests --filter RepositoryBootstrapTests`
@@ -860,20 +897,12 @@ it was not moved or rewritten.
 - Disabled; no paid requests authorized and none made.
 
 ## Next exact task
-- Task ID: T11 — Timeline compiler, Thai captions and native FFmpeg renderer
-- Inputs/files to read: plan T11 (`## T11` near line 1177), the C4 `ITimelineCompiler`,
-  `IVideoRenderer`, `RenderManifest` and `RenderResult` contracts, D4 caption/timing
-  rules, T10 `VoiceSegment`/`VoiceManifest`, T04 `SafeProcessRunner` and `ManifestHasher`,
-  T03 asset storage, and the current mock video renderer path.
-- First failing tests: `tests/ContentFactory.UnitTests/TimelineTests.cs` and
-  `tests/ContentFactory.MediaTests/RenderGoldenTests.cs`:
-  `ThaiMarksStayWithBaseCharacter`, `AssOverrideTextRenderedLiterally`,
-  `CaptionOverflowBlocksRender`, `NarrationNeverCutMidWord`,
-  `TimelineDurationUsesFrameGrid`, `MissingHardwareEncoderFallsBackExplicitly`.
-- Prerequisite: T03, T04, T08, T10. Keep `ALLOW_PAID_APIS=false`, `AUTO_PUBLISH=false` and
-  `PUBLISHING_MODE=manual_export`; no paid request or publication is allowed. A video must
-  be a real MP4 produced through native media tooling, never a renamed placeholder image.
-- Remaining blockers: FFmpeg/FFprobe and a Thai-capable font are missing, so native render,
-  encoder/font probes and golden media tests must be reported `blocked`/`skipped`, never
-  `passed`; Node 26.11.1 vs pinned 24.22.0 and port 3000 occupancy remain environment
-  blockers. T10 is committed; do not start T11 until the owner reviews and says to continue.
+- Task ID: T15 — End-to-end pipeline and mock/live separation
+- Inputs/files to read: plan T15 (`## T15` after T14), the D1 stage graph, `WorkflowDefinition`,
+  all handlers registered in the Worker, and the mock/live provider separation in section F.
+- Prerequisite: T01–T14. Keep `ALLOW_PAID_APIS=false`, `AUTO_PUBLISH=false` and
+  `PUBLISHING_MODE=manual_export`; no paid request or publication is allowed.
+- Remaining blockers: FFmpeg/FFprobe and a Thai-capable font are missing (media tests blocked);
+  Node 26.11.1 vs pinned 24.22.0 and port 3000 occupancy remain. Re-queuing a poll job after an
+  owner attach is not wired yet. This is the end of M1's cloud half: stop for owner review
+  before starting T15.

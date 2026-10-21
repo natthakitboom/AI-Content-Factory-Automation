@@ -363,6 +363,8 @@ public sealed class AppDbContext : DbContext
             entity.Property(x => x.Status).HasMaxLength(32).IsRequired();
             entity.HasOne<Job>().WithMany().HasForeignKey(x => x.JobId)
                 .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<Asset>().WithMany().HasForeignKey(x => x.OutputAssetId)
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => x.ClientOperationId)
                 .IsUnique()
                 .HasDatabaseName("ux_provider_requests_client_operation");

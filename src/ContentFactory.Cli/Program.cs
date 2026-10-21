@@ -37,8 +37,20 @@ internal static class CliEntryPoint
             return await new InitOwnerCommand(db, hasher).ExecuteAsync(username, password);
         }
 
+        if (args.Length > 0 && string.Equals(args[0], "reconcile-attach", StringComparison.Ordinal))
+        {
+            return await new ReconcileCommand(db).AttachAsync(args);
+        }
+
+        if (args.Length > 0 && string.Equals(args[0], "reconcile-no-charge", StringComparison.Ordinal))
+        {
+            return await new ReconcileCommand(db).NoChargeAsync(args);
+        }
+
         Console.Error.WriteLine("Usage: ContentFactory.Cli init-owner [username]");
         Console.Error.WriteLine("Creates the single local owner with a hidden password prompt.");
+        Console.Error.WriteLine("       ContentFactory.Cli reconcile-attach <row-id> <fal-request-id> <status-url> <response-url> [cancel-url]");
+        Console.Error.WriteLine("       ContentFactory.Cli reconcile-no-charge <row-id> <reason...>");
         return 2;
     }
 }

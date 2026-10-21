@@ -124,47 +124,58 @@ public sealed class FalVideoProvider : IVideoProvider
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(submission);
+        EnsureQueueUrl(submission.StatusUrl);
+        EnsureQueueUrl(submission.ResponseUrl);
 
-        if (submission.StatusUrl is null)
+        using var status = await SendGetWithRetriesAsync(submission.StatusUrl, ct);
+        if (status is null)
         {
-            throw new ValidationException(
-                "FAL_STATUS_URL_MISSING",
-                "The fal submission has no status URL to poll.");
+            // Poll failures never become a new paid submit; the caller reschedules.
+            return new ProviderPollResult(ProviderRunStatus.InProgress, null, null, null);
         }
 
-        HttpResponseMessage response;
-        try
+        var statusText = GetString(status.RootElement, "status")?.ToUpperInvariant();
+        switch (statusText)
         {
-            response = await _http.GetAsync(submission.StatusUrl, ct);
-        }
-        catch (HttpRequestException exception)
-        {
-            throw new SubmissionUnknownException(
-                "The fal status poll could not be completed.",
-                exception);
-        }
-
-        if (!response.IsSuccessStatusCode)
-        {
-            return new ProviderPollResult(
-                ProviderRunStatus.InProgress,
-                null,
-                null,
-                null);
+            case "IN_QUEUE" or "IN_PROGRESS":
+                return new ProviderPollResult(ProviderRunStatus.InProgress, null, null, null);
+            case "FAILED":
+                return new ProviderPollResult(
+                    ProviderRunStatus.FailedConfirmed, null, "FAL_GENERATION_FAILED", null);
+            case "COMPLETED":
+                break;
+            default:
+                return new ProviderPollResult(
+                    ProviderRunStatus.SubmissionUnknown, null, "FAL_STATUS_UNRECOGNISED", null);
         }
 
-        var json = await response.Content.ReadAsStringAsync(ct);
-        using var document = JsonDocument.Parse(json);
-        var status = GetString(document.RootElement, "status")?.ToUpperInvariant();
-        var statusEnum = status switch
+        // The output URL is short-lived and signed, so it is fetched from the existing
+        // request's response_url on every call instead of being stored.
+        using var result = await SendGetWithRetriesAsync(submission.ResponseUrl, ct);
+        if (result is null)
         {
-            "IN_QUEUE" or "IN_PROGRESS" => ProviderRunStatus.InProgress,
-            "COMPLETED" => ProviderRunStatus.Succeeded,
-            "FAILED" => ProviderRunStatus.FailedConfirmed,
-            _ => ProviderRunStatus.SubmissionUnknown
-        };
+            return new ProviderPollResult(ProviderRunStatus.InProgress, null, null, null);
+        }
 
-        return new ProviderPollResult(statusEnum, null, null, null);
+        Uri? output = null;
+        if (result.RootElement.ValueKind == JsonValueKind.Object
+            && result.RootElement.TryGetProperty("video", out var video))
+        {
+            output = GetUri(video, "url");
+        }
+
+        int? seed = result.RootElement.ValueKind == JsonValueKind.Object
+            && result.RootElement.TryGetProperty("seed", out var seedElement)
+            && seedElement.ValueKind == JsonValueKind.Number
+            && seedElement.TryGetInt32(out var seedValue)
+                ? seedValue
+                : null;
+
+        return new ProviderPollResult(
+            ProviderRunStatus.Succeeded,
+            output,
+            output is null ? "FAL_OUTPUT_MISSING" : null,
+            seed);
     }
 
     public async Task RequestCancelAsync(
@@ -178,17 +189,120 @@ public sealed class FalVideoProvider : IVideoProvider
             return;
         }
 
+        EnsureQueueUrl(submission.CancelUrl);
+
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Post, submission.CancelUrl);
-            request.Headers.Authorization = new AuthenticationHeaderValue(
-                "Key",
-                _options.ApiKey);
-            await _http.SendAsync(request, ct);
+            using var request = new HttpRequestMessage(HttpMethod.Put, submission.CancelUrl);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Key", _options.ApiKey);
+            using var response = await _http.SendAsync(request, ct);
         }
         catch (HttpRequestException)
         {
             // Cancellation is best-effort; the next poll/reconcile will determine state.
+        }
+    }
+
+    /// <summary>
+    /// GET with bounded retries for 429, 5xx and network failures, honoring Retry-After and
+    /// adding jitter. Returns null when retries are exhausted. Other 4xx responses are
+    /// definitive and surface as <see cref="ProviderRejectedException"/>.
+    /// </summary>
+    private async Task<JsonDocument?> SendGetWithRetriesAsync(Uri url, CancellationToken ct)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            TimeSpan? wait = null;
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.Authorization = new AuthenticationHeaderValue(
+                    "Key", _options.ApiKey);
+                using var response = await _http.SendAsync(request, ct);
+                var code = (int)response.StatusCode;
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var text = await response.Content.ReadAsStringAsync(ct);
+                    try
+                    {
+                        return JsonDocument.Parse(text);
+                    }
+                    catch (JsonException)
+                    {
+                        wait = BackoffFor(attempt, null);
+                    }
+                }
+                else if (code == 429 || code >= 500)
+                {
+                    wait = BackoffFor(attempt, RetryAfterOf(response));
+                }
+                else
+                {
+                    throw new ProviderRejectedException(
+                        "FAL_POLL_REJECTED",
+                        $"The fal provider rejected a status request with status {code}.");
+                }
+            }
+            catch (HttpRequestException)
+            {
+                wait = BackoffFor(attempt, null);
+            }
+
+            if (attempt >= _options.GetRetries)
+            {
+                return null;
+            }
+
+            await _options.Delay(wait!.Value, ct);
+        }
+    }
+
+    private TimeSpan BackoffFor(int attempt, TimeSpan? retryAfter)
+    {
+        var backoff = TimeSpan.FromTicks(
+            _options.GetRetryBaseDelay.Ticks * (1L << Math.Min(attempt, 6)));
+        var jitter = TimeSpan.FromTicks(
+            (long)(_options.GetRetryBaseDelay.Ticks * _options.Jitter()));
+        var wait = backoff + jitter;
+        if (retryAfter is { } hinted && hinted > wait)
+        {
+            wait = hinted;
+        }
+
+        return wait > _options.MaxRetryAfter ? _options.MaxRetryAfter : wait;
+    }
+
+    private static TimeSpan? RetryAfterOf(HttpResponseMessage response)
+    {
+        var header = response.Headers.RetryAfter;
+        if (header?.Delta is { } delta)
+        {
+            return delta;
+        }
+
+        if (header?.Date is { } date)
+        {
+            var remaining = date - DateTimeOffset.UtcNow;
+            return remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The fal key is only ever sent to the configured queue host over HTTPS.
+    /// </summary>
+    private void EnsureQueueUrl(Uri url)
+    {
+        if (url is null
+            || !url.IsAbsoluteUri
+            || url.Scheme != Uri.UriSchemeHttps
+            || !string.Equals(url.Host, _options.BaseUrl.Host, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ValidationException(
+                "FAL_QUEUE_URL_REJECTED",
+                "The fal queue URL must be HTTPS on the configured queue host.");
         }
     }
 

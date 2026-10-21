@@ -27,6 +27,20 @@ public sealed class FalOptions
 
     public int JpegQuality { get; init; } = 90;
 
+    /// <summary>Extra attempts for an idempotent GET after a 429, 5xx or network error.</summary>
+    public int GetRetries { get; init; } = 2;
+
+    public TimeSpan GetRetryBaseDelay { get; init; } = TimeSpan.FromSeconds(1);
+
+    public TimeSpan MaxRetryAfter { get; init; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>Injected so tests never sleep; production waits for real.</summary>
+    public Func<TimeSpan, CancellationToken, Task> Delay { get; init; } =
+        static (delay, ct) => Task.Delay(delay, ct);
+
+    /// <summary>Returns a value in [0, 1) used to jitter retry delays.</summary>
+    public Func<double> Jitter { get; init; } = static () => Random.Shared.NextDouble();
+
     public static FalOptions FromEnvironment()
     {
         var apiKey = Environment.GetEnvironmentVariable("FAL_KEY") ?? string.Empty;

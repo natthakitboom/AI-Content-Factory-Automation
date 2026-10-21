@@ -1317,6 +1317,10 @@ namespace ContentFactory.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("model");
 
+                    b.Property<Guid?>("OutputAssetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("output_asset_id");
+
                     b.Property<string>("Provider")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -1361,6 +1365,8 @@ namespace ContentFactory.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ux_provider_requests_client_operation");
 
                     b.HasIndex("JobId");
+
+                    b.HasIndex("OutputAssetId");
 
                     b.ToTable("provider_requests", "app", t =>
                         {
@@ -1745,6 +1751,11 @@ namespace ContentFactory.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("JobId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("ContentFactory.Infrastructure.Persistence.Entities.Asset", null)
+                        .WithMany()
+                        .HasForeignKey("OutputAssetId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("ContentFactory.Infrastructure.Persistence.Entities.Publication", b =>
