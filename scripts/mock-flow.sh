@@ -6,6 +6,8 @@
 # Usage: scripts/mock-flow.sh [api-base-url]   (default http://127.0.0.1:5080)
 set -euo pipefail
 API="${1:-http://127.0.0.1:5080}"
+[ -x /opt/homebrew/opt/ffmpeg-full/bin/ffmpeg ] && export PATH="/opt/homebrew/opt/ffmpeg-full/bin:$PATH"
+command -v ffmpeg >/dev/null || { echo "ffmpeg is needed to create the sample image (brew install ffmpeg-full)." >&2; exit 2; }
 if [ -z "${CF_OWNER_PASSWORD:-}" ]; then
   if [ -t 0 ]; then
     read -r -s -p "Owner password (hidden, not stored): " CF_OWNER_PASSWORD; echo
@@ -14,7 +16,6 @@ if [ -z "${CF_OWNER_PASSWORD:-}" ]; then
   fi
 fi
 case "$API" in http://127.0.0.1:*|http://localhost:*) ;; *) echo "Only a loopback API is allowed." >&2; exit 2;; esac
-command -v ffmpeg >/dev/null || { echo "ffmpeg is needed to create the sample image." >&2; exit 2; }
 
 jar="$(mktemp)"; img="$(mktemp -d)/sample.jpg"
 trap 'rm -f "$jar"; rm -rf "$(dirname "$img")"' EXIT
