@@ -60,6 +60,7 @@ builder.Services.AddScoped<ContentFactory.Infrastructure.Export.ExportService>()
 builder.Services.AddScoped<IExportService>(services =>
     services.GetRequiredService<ContentFactory.Infrastructure.Export.ExportService>());
 builder.Services.AddScoped<ContentFactory.Infrastructure.Export.PublicationRecorder>();
+builder.Services.AddScoped<ContentFactory.Infrastructure.Analytics.MetricsImporter>();
 builder.Services.AddSingleton<LoginThrottle>();
 builder.Services.AddSingleton<IPasswordHasher<OwnerUser>, PasswordHasher<OwnerUser>>();
 builder.Services.AddSingleton(new SecretRedactor(
@@ -147,6 +148,7 @@ app.MapAssetEndpoints();
 app.MapReviewEndpoints();
 app.MapExportEndpoints();
 app.MapScheduleEndpoints();
+app.MapAnalyticsEndpoints();
 app.MapSystemEndpoints();
 
 app.Run();

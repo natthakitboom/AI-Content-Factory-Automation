@@ -482,3 +482,14 @@ this file explains local choices and their consequences.
   approval, so budget, approval and resource guards still decide all spending. Daily limits count
   `schedule_occurrences` in PostgreSQL, which survives restarts. Schedules are created disabled.
 
+## ADR-0021: Analytics import and aggregation (T19)
+
+- Decision: CSV import needs an explicit mapping (source, as-of or as-of column, publication column and
+  kind, each metric column, currency for money). Rows are keyed by source, publication and as-of, so a
+  repeat import changes nothing and a corrected row updates in place with a `metrics.row_updated` audit
+  event holding the previous values. Returned commission is subtracted from settled commission.
+- Decision: the overview uses the latest cumulative snapshot per publication, keeps unreported numbers
+  null, returns null ratios for a missing or zero denominator (using only posts that reported both
+  numbers), separates currencies, and is produced per source because two sources can report the same
+  post. The CSV reader never evaluates formulas and enforces size limits.
+

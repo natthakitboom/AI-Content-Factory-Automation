@@ -25,6 +25,7 @@ M1 complete through T15 (T15 done; T16 next, dashboard work blocked on Node pin)
 | T16 (API) | partial | (this commit) | `ApprovalTests` → 10 passed; `make test-integration` → 154 passed; UI + Playwright spec **not done** (no dashboard yet, Node pin) | `apps/dashboard` does not exist; `review.spec.ts` pending |
 | T17 (API) | partial | (this commit) | `ExportTests` → 9 passed, `ExportEndpointTests` → 2 passed; ZIP verified byte-for-byte with sha256sums | UI + `export.spec.ts` pending; migration `AddVideoVersionOutputs` applied |
 | T18 | done (API/worker) | (this commit) | `ScheduleTimezoneTests` → 6 passed (unit); `ScheduleRecoveryTests` → 7 passed (PostgreSQL); schedules default disabled; worker enqueues a `schedule_tick` job per minute only when `ENABLE_SCHEDULES=true` | No schedule UI yet; a failed run for a slot is audited and not retried |
+| T19 (API) | partial | (this commit) | `MetricsTests` → 10 passed (unit); `MetricsImportTests` → 7 passed; `AnalyticsEndpointTests` → 2 passed | analytics page UI pending (no dashboard); overview is per source and never merges sources |
 
 ## Last verified commands
 
