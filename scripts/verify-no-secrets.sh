@@ -16,16 +16,18 @@ while IFS= read -r -d '' file; do
   esac
 done < <(git ls-files -z)
 
+# tests/ContentFactory.UnitTests/ReleaseReadinessTests.cs is excluded on purpose: it plants fake secrets
+# to prove this scanner detects them.
 scan() { # rule-name regex
   local name="$1" regex="$2"
   while IFS=: read -r file line _; do
     [ -n "$file" ] && report "$file:$line" "$name"
   done < <(git ls-files -z | xargs -0 grep -I -n -E -e "$regex" 2>/dev/null \
-    | grep -v -E '^(\.env\.example|\.env\.test\.example|apps/dashboard/package-lock\.json):' || true)
+    | grep -v -E '^(\.env\.example|\.env\.test\.example|apps/dashboard/package-lock\.json|tests/ContentFactory\.UnitTests/ReleaseReadinessTests\.cs):' || true)
 }
 
 scan "private key block" '-----BEGIN [A-Z ]*PRIVATE KEY-----'
-scan "named secret with a value" '(FAL_KEY|AZURE_SPEECH_KEY|LM_STUDIO_API_TOKEN|DATABASE_PASSWORD)[[:space:]]*[=:][[:space:]]*["'"'"']?[A-Za-z0-9_./+-]{12,}'
+scan "named secret with a value" '(FAL_KEY|AZURE_SPEECH_KEY|LM_STUDIO_API_TOKEN|DATABASE_PASSWORD)[[:space:]]*[=:][[:space:]]*["'"'"']?[A-Za-z0-9_./+-]{12,}([^=A-Za-z0-9_./+-]|$)'
 scan "API key shape (sk-)" 'sk-[A-Za-z0-9]{20,}'
 scan "AWS access key shape" 'AKIA[0-9A-Z]{16}'
 scan "GitHub token shape" 'gh[pousr]_[A-Za-z0-9]{30,}'
