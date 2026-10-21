@@ -2,11 +2,17 @@
 # Walks one product through the offline pipeline using only the public API: product, approved claim,
 # a generated sample image, channel, campaign and a run. The worker (make dev) then plans, narrates
 # (mock tone), renders and QA-checks it; the result waits for YOUR review in the dashboard.
-# Needs CF_OWNER_PASSWORD (the password you set with init-owner). Mock providers only.
+# Asks for the owner password (hidden) or reads CF_OWNER_PASSWORD. Mock providers only.
 # Usage: scripts/mock-flow.sh [api-base-url]   (default http://127.0.0.1:5080)
 set -euo pipefail
 API="${1:-http://127.0.0.1:5080}"
-: "${CF_OWNER_PASSWORD:?Set CF_OWNER_PASSWORD to the owner password (it is not stored by this script).}"
+if [ -z "${CF_OWNER_PASSWORD:-}" ]; then
+  if [ -t 0 ]; then
+    read -r -s -p "Owner password (hidden, not stored): " CF_OWNER_PASSWORD; echo
+  else
+    echo "Set CF_OWNER_PASSWORD, or run this in a terminal to be asked for it." >&2; exit 2
+  fi
+fi
 case "$API" in http://127.0.0.1:*|http://localhost:*) ;; *) echo "Only a loopback API is allowed." >&2; exit 2;; esac
 command -v ffmpeg >/dev/null || { echo "ffmpeg is needed to create the sample image." >&2; exit 2; }
 
