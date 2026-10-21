@@ -27,6 +27,11 @@ if (args.Length >= 2 && args[0] == "drop")
     return 0;
 }
 
+if (args.Length >= 4 && args[0] == "bench")
+{
+    return await BenchAsync(admin, Path.GetFullPath(args[1]), int.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture), args[3]);
+}
+
 if (args.Length < 3 || args[0] != "seed")
 {
     Console.Error.WriteLine("Usage: seed <root-dir> <out-file> | drop <database>");
@@ -154,4 +159,94 @@ static async Task ExecuteAdminAsync(string adminConnection, string sql)
     await using var command = connection.CreateCommand();
     command.CommandText = sql;
     await command.ExecuteNonQueryAsync();
+}
+
+// bench <root-dir> <count> <out-file>: N template-only clips through the real mock pipeline,
+// timed one by one. It records what it can read and says what it cannot (no temperature).
+static async Task<int> BenchAsync(string adminConnection, string root, int count, string outFile)
+{
+    var database = Prefix + "bench_" + Guid.NewGuid().ToString("N")[..10];
+    await ExecuteAdminAsync(adminConnection, $"CREATE DATABASE \"{database}\" TEMPLATE template0 ENCODING 'UTF8'");
+    try
+    {
+        var connection = new NpgsqlConnectionStringBuilder(adminConnection) { Database = database }.ConnectionString;
+        await using var db = new AppDbContext(
+            new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connection).Options, TimeProvider.System);
+        await db.Database.MigrateAsync();
+        var harness = new PipelineHarness(db, root);
+
+        var runner = new ContentFactory.Infrastructure.Media.SafeProcessRunner();
+        var storage = new ContentFactory.Infrastructure.Storage.StorageOptions { DataRoot = Path.Combine(root, "probe") };
+        var selection = await new ContentFactory.Infrastructure.Media.EncoderProbe(
+                runner, storage,
+                new ContentFactory.Infrastructure.Media.EncoderProbeOptions { FontFingerprint = new string('a', 64) })
+            .ProbeAsync(default);
+
+        var swapBefore = await ReadAsync("sysctl", "-n", "vm.swapusage");
+        var pressureBefore = await ReadAsync("memory_pressure", "-Q");
+        var samples = new List<double>();
+        var failures = 0;
+        for (var i = 0; i < count; i++)
+        {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            var campaign = await harness.SeedCampaignAsync(VideoMode.TemplateOnly, $"Benchmark product {i + 1}");
+            await harness.EnqueueAsync(campaign);
+            await harness.PumpAsync();
+            watch.Stop();
+            samples.Add(watch.Elapsed.TotalMilliseconds);
+            if (await harness.UnfinishedWorkAsync() is not null)
+            {
+                failures++;
+            }
+        }
+
+        var swapAfter = await ReadAsync("sysctl", "-n", "vm.swapusage");
+        var pressureAfter = await ReadAsync("memory_pressure", "-Q");
+        long outputBytes = Directory.EnumerateFiles(Path.Combine(root, "data"), "*", SearchOption.AllDirectories)
+            .Sum(f => new FileInfo(f).Length);
+        var ffmpeg = (await ReadAsync("ffmpeg", "-version")).Split('\n')[0];
+        await File.WriteAllTextAsync(outFile, JsonSerializer.Serialize(new
+        {
+            date = DateTimeOffset.UtcNow,
+            count,
+            failures,
+            samplesMs = samples,
+            encoder = selection.VideoEncoder,
+            hardwareAccelerated = selection.HardwareAccelerated,
+            encoderReason = selection.Reason,
+            ffmpeg,
+            host = new { model = await ReadAsync("sysctl", "-n", "hw.model"), cpus = await ReadAsync("sysctl", "-n", "hw.ncpu"), memBytes = await ReadAsync("sysctl", "-n", "hw.memsize") },
+            swapBefore, swapAfter, pressureBefore = FirstLine(pressureBefore, "free percentage"), pressureAfter = FirstLine(pressureAfter, "free percentage"),
+            outputBytes,
+            peakWorkingSetBytes = System.Diagnostics.Process.GetCurrentProcess().PeakWorkingSet64,
+            voice = "mock sine tone (not speech, not uploaded narration)",
+            temperature = "not measured: no sensor is read"
+        }));
+        return failures == 0 ? 0 : 1;
+    }
+    finally
+    {
+        NpgsqlConnection.ClearAllPools();
+        await ExecuteAdminAsync(adminConnection, $"DROP DATABASE IF EXISTS \"{database}\" WITH (FORCE)");
+    }
+}
+
+static string FirstLine(string text, string contains)
+    => text.Split('\n').FirstOrDefault(l => l.Contains(contains, StringComparison.OrdinalIgnoreCase))?.Trim() ?? "unavailable";
+
+static async Task<string> ReadAsync(string file, params string[] arguments)
+{
+    try
+    {
+        var info = new System.Diagnostics.ProcessStartInfo(file) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        foreach (var a in arguments) info.ArgumentList.Add(a);
+        using var p = System.Diagnostics.Process.Start(info)!;
+        var output = await p.StandardOutput.ReadToEndAsync();
+        await p.WaitForExitAsync();
+        return output.Trim();
+    }
+    catch (Exception)
+    {
+        return "unavailable";
+    }
 }

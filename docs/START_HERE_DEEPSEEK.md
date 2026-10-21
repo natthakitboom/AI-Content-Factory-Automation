@@ -17,7 +17,7 @@ test evidence.
 - M0 (T00–T05) is complete and was reviewed by the owner.
 - Milestone M1: T06–T12 (durable jobs, worker orchestration, local script planning,
   budget/approval controls, narration, timeline/render, technical QA and review).
-- T00–T21 are complete (offline, mock providers). T22 is next; its paid pilot needs the owner. Dashboard: `make test-dashboard`, `make test-e2e`.
+- T00–T21 are complete (offline, mock providers); T22's offline part is done and its paid pilot is blocked on the owner. T23 is next. Dashboard: `make test-dashboard`, `make test-e2e`.
 - Do not start M2+ work until the owner reviews M1.
 
 ## Safety rails

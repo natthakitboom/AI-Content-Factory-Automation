@@ -28,6 +28,7 @@ M1–M3 implemented through T21 (T22 paid pilot and T23 release not started; see
 | T19 | done | (this commit) | `MetricsTests` 10 (unit), `MetricsImportTests` 7, `AnalyticsEndpointTests` 2; Playwright `metrics.spec.ts` (empty state, repeat import adds nothing, missing values show "No data") | Overview is per source and never merges sources |
 | T20 | done | (this commit) | `BackupRestoreTests` → 8 passed (4 use the real `pg_dump`/`pg_restore` in the project container, skipped if Docker is absent); `QuiesceTests` → 1 passed; `make test-integration` → 179 passed; real `scripts/backup.sh` run produced owner-only files (0600/0700) | Restore tested into scratch DBs only; `restore.sh` needs the operator to type the confirmation; off-device encrypted copy is the operator's job |
 | T21 | done | (this commit) | `OperationsTests` 6 passed; Playwright `operations.spec.ts` (MOCK banner, reserved vs spent, no retry for uncertain jobs, pause persists, no keys in payloads, diagnostics, keyboard + 390 px width) | Thermal temperature is reported as unavailable, not invented |
+| T22 (offline) | done; live pilot NOT run | (this commit) | `FailureInjectionTests` → 9 passed; `make test-integration` → 195 passed; `scripts/benchmark-local.sh 10` → 10/10 clips, p50 3.4 s, p95 3.6 s, h264_videotoolbox; `scripts/live-preflight.sh` → BLOCKED (no key, paid flag off, no envelope, no price, 0/5 images cleared) | Pilot needs the owner; `live-pilot.sh` stops after preflight by design; temperature not measurable; benchmark voice is a mock tone, not uploaded narration |
 
 ## Last verified commands
 
@@ -952,16 +953,7 @@ it was not moved or rewritten.
 - Disabled; no paid requests authorized and none made.
 
 ## Next exact task
-- Task ID: T22 — Failure injection, local benchmark and optional paid pilot
-- State: not started. Everything up to T21 is implemented and verified offline with mock providers.
-- What can be done without the owner: the failure-injection tests (`FailureInjectionTests`) and the
-  local benchmark script, both offline.
-- What must NOT be done without the owner: the live preflight/pilot steps (`live-preflight.sh`,
-  `live-pilot.sh`). They need a real FAL_KEY, a verified price snapshot, a live approval envelope and
-  the owner's explicit confirmation; none exists. Keep `ALLOW_PAID_APIS=false`, `AUTO_PUBLISH=false`
-  and `PUBLISHING_MODE=manual_export`.
-- T23 (CI, packaging, runbook, release handoff) follows T22 and states the release is mock/local-only
-  until a pilot is run.
-- Open environment notes: `make doctor` still reports port 54329 "in use" because that is the
-  project's own PostgreSQL container; supply a licensed Thai font through `CAPTION_FONT_FILE` for
-  production renders (the e2e run uses the macOS Thonburi file already on the machine).
+- Task ID: T23 — CI, packaging, operator runbook and release handoff
+- State: not started. T22's offline part is done; its paid pilot is blocked on the owner (see `docs/pilot-results.md`).
+- T23 must label the release mock/local-only until a pilot is run. Keep `ALLOW_PAID_APIS=false`,
+  `AUTO_PUBLISH=false`, `PUBLISHING_MODE=manual_export`.
