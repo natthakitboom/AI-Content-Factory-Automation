@@ -1,0 +1,53 @@
+# Verification only. This pipeline builds and tests with mock providers; it needs no paid key and
+# it does not publish, tag or ship anything. It is NOT evidence about the Mac hardware encoder:
+# Linux runs the software libx264 encoder, so VideoToolbox is judged only by the local benchmark
+# in docs/pilot-results.md. Connecting it to an organisation is the owner's decision.
+trigger:
+  branches:
+    include: [main]
+pr:
+  branches:
+    include: ['*']
+
+pool:
+  vmImage: ubuntu-24.04
+
+variables:
+  ALLOW_PAID_APIS: 'false'
+  AUTO_PUBLISH: 'false'
+  PUBLISHING_MODE: 'manual_export'
+  TEXT_PROVIDER: 'mock'
+  VIDEO_PROVIDER: 'mock'
+  VOICE_PROVIDER: 'mock'
+  ENABLE_SCHEDULES: 'false'
+
+steps:
+  - task: UseDotNet@2
+    displayName: .NET SDK from global.json
+    inputs:
+      useGlobalJson: true
+
+  - task: NodeTool@0
+    displayName: Node from .node-version
+    inputs:
+      versionSource: fromFile
+      versionFilePath: .node-version
+
+  - script: |
+      sudo apt-get update
+      sudo apt-get install -y ffmpeg fonts-thai-tlwg
+      ffmpeg -hide_banner -filters | grep -q ' subtitles ' || { echo 'FFmpeg lacks libass'; exit 1; }
+    displayName: FFmpeg (software libx264) and a Thai font
+
+  - script: |
+      docker run -d --name content-factory-postgres -e POSTGRES_PASSWORD=ci-only -e POSTGRES_USER=content_factory \
+        -p 127.0.0.1:54329:5432 postgres:18-alpine
+      for i in $(seq 1 30); do docker exec content-factory-postgres pg_isready -U content_factory && break; sleep 2; done
+    displayName: Scratch PostgreSQL on loopback
+
+  - script: |
+      export CF_TEST_POSTGRES='Host=127.0.0.1;Port=54329;Database=postgres;Username=content_factory;Password=ci-only'
+      export CAPTION_FONT_FILE=/usr/share/fonts/truetype/tlwg/Loma.ttf
+      (cd apps/dashboard && npx playwright install --with-deps chromium)
+      ./scripts/verify-all.sh
+    displayName: Verify every gate (mock providers only)

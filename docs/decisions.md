@@ -527,3 +527,17 @@ this file explains local choices and their consequences.
 - Known gap: the UI for each task was written before its Playwright spec, so the e2e RED step was
   not observed for T16/T17/T19/T21 (the API-level tests of those tasks did have a RED step).
 
+## ADR-0024: Verification, packaging and release stance (T23)
+
+- Decision: `scripts/verify-all.sh` is the single verification entry point. It reports PASS, FAIL or
+  BLOCKED per gate and exits 2 when a prerequisite is missing, so a missing FFmpeg, database or Node
+  version can never read as a pass. It pins every provider to mock, blanks all keys and the approval
+  path, and builds with warnings as errors. `scripts/verify-no-secrets.sh` scans tracked files and never
+  prints a value.
+- Decision: `azure-pipelines.yml` only verifies (Linux, software libx264, scratch PostgreSQL on loopback).
+  It carries no secret, deploys nothing and tags nothing; it is untested until an owner connects it.
+- Decision: `make dev` starts everything on `127.0.0.1` and `make dev-stop` never removes the database
+  (no compose `down`, no volume removal). No launch agent or power setting is changed.
+- Decision: the release is labelled mock/local-only. Added `GET/POST /api/v1/channels` because the owner
+  could not otherwise create a channel through the product (found while writing `scripts/mock-flow.sh`).
+

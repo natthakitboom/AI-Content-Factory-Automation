@@ -53,3 +53,6 @@ media/generated/
 
 # Local reports that may contain machine paths
 docs/environment-report.local.md
+
+# Local process ids and logs written by scripts/dev-start.sh
+.run/

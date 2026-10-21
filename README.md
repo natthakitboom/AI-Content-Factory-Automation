@@ -4,8 +4,9 @@ Local-first, single-owner pipeline that turns approved product facts and license
 into vertical videos with narration, captions, technical QA, human review and a manual
 export package.
 
-The implementation plan is `docs/AI_CONTENT_FACTORY_DEVELOPMENT_PLAN.md`. The current
-milestone is M0 (T00–T05). Development uses mock providers and never calls a paid API.
+The implementation plan is `docs/AI_CONTENT_FACTORY_DEVELOPMENT_PLAN.md`. This is a
+**mock/local-only release**: it was verified end to end with mock providers, and no paid
+API has ever been called. Start with `docs/operator-runbook.md`.
 
 ## Prerequisites
 
@@ -21,9 +22,12 @@ The checked-in `global.json` pins .NET SDK `10.0.402`; `.node-version` pins Node
 ```bash
 cp .env.example .env        # fill local-only values; never commit .env
 make doctor                 # read-only; exit 2 means a prerequisite is blocked
-make build
-make test-unit
+make verify-fast            # secret scan, build, unit, integration, dashboard checks
+make dev                    # PostgreSQL + API + worker + dashboard on 127.0.0.1
 ```
+
+Other commands: `make verify` (every gate, including real FFmpeg and Playwright), `make backup`,
+`make restore-test`, `make dev-stop` (never deletes the database), `make smoke-mock`.
 
 ## Safety defaults
 
@@ -48,7 +52,8 @@ src/ContentFactory.Infrastructure  persistence, storage, providers, media, secur
 src/ContentFactory.Api             loopback REST API
 src/ContentFactory.Worker          durable background worker
 src/ContentFactory.Cli             owner administration commands
-tests/                             unit, integration and media tests
+apps/dashboard                     Next.js owner dashboard (loopback only)
+tests/                             unit, integration, media, shared test support and e2e seed
 docs/                              plan, progress, decisions, runbooks
 scripts/                           doctor and operational scripts
 ```
@@ -59,3 +64,5 @@ scripts/                           doctor and operational scripts
 - `docs/progress.md` — verified commands, evidence and blockers
 - `docs/decisions.md` — recorded architecture decisions
 - `docs/environment-report.md` — actual machine/toolchain findings
+- `docs/operator-runbook.md` — how to run, back up, restore and release
+- `docs/pilot-results.md` — measured benchmark, failure-injection coverage and the blocked live pilot

@@ -38,7 +38,7 @@ for (const tool of ["ffmpeg", "ffprobe"]) {
   }
 }
 
-const font = ["/System/Library/Fonts/Thonburi.ttc", "/System/Library/Fonts/Supplemental/Thonburi.ttc"].find(existsSync);
+const font = [process.env.CAPTION_FONT_FILE, "/System/Library/Fonts/Thonburi.ttc", "/System/Library/Fonts/Supplemental/Thonburi.ttc", "/usr/share/fonts/truetype/tlwg/Loma.ttf"].filter(Boolean).find(existsSync);
 if (!font) {
   console.error("No Thai caption font found for CAPTION_FONT_FILE; the end-to-end run is BLOCKED (not passed).");
   process.exit(2);

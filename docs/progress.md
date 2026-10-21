@@ -1,7 +1,7 @@
 # Development progress
 
 ## Current milestone
-M1–M3 implemented through T21 (T22 paid pilot and T23 release not started; see Next exact task)
+T00–T23 implemented; release is mock/local-only (the T22 paid pilot has not run; see Next exact task)
 
 ## Task status
 | Task | Status | Commit | Evidence | Blocker |
@@ -29,6 +29,7 @@ M1–M3 implemented through T21 (T22 paid pilot and T23 release not started; see
 | T20 | done | (this commit) | `BackupRestoreTests` → 8 passed (4 use the real `pg_dump`/`pg_restore` in the project container, skipped if Docker is absent); `QuiesceTests` → 1 passed; `make test-integration` → 179 passed; real `scripts/backup.sh` run produced owner-only files (0600/0700) | Restore tested into scratch DBs only; `restore.sh` needs the operator to type the confirmation; off-device encrypted copy is the operator's job |
 | T21 | done | (this commit) | `OperationsTests` 6 passed; Playwright `operations.spec.ts` (MOCK banner, reserved vs spent, no retry for uncertain jobs, pause persists, no keys in payloads, diagnostics, keyboard + 390 px width) | Thermal temperature is reported as unavailable, not invented |
 | T22 (offline) | done; live pilot NOT run | (this commit) | `FailureInjectionTests` → 9 passed; `make test-integration` → 195 passed; `scripts/benchmark-local.sh 10` → 10/10 clips, p50 3.4 s, p95 3.6 s, h264_videotoolbox; `scripts/live-preflight.sh` → BLOCKED (no key, paid flag off, no envelope, no price, 0/5 images cleared) | Pilot needs the owner; `live-pilot.sh` stops after preflight by design; temperature not measurable; benchmark voice is a mock tone, not uploaded narration |
+| T23 | done (CI not run) | (this commit) | `ReleaseReadinessTests` → 7 passed (RED was 7 failed); `make verify` → PASS for secret scan, build with warnings as errors, unit, integration, dashboard, media, Playwright; `make restore-test` PASSED (the app database held 0 assets, so asset hashing is proven by `BackupRestoreTests`, not by this run); `make dev`/`dev-stop` walkthrough on loopback, ports freed, database kept | `azure-pipelines.yml` has never run (no Azure DevOps project is connected); Linux CI would use libx264 and says nothing about VideoToolbox; `v0.1.0` NOT tagged, owner must tag |
 
 ## Last verified commands
 
@@ -953,7 +954,11 @@ it was not moved or rewritten.
 - Disabled; no paid requests authorized and none made.
 
 ## Next exact task
-- Task ID: T23 — CI, packaging, operator runbook and release handoff
-- State: not started. T22's offline part is done; its paid pilot is blocked on the owner (see `docs/pilot-results.md`).
-- T23 must label the release mock/local-only until a pilot is run. Keep `ALLOW_PAID_APIS=false`,
-  `AUTO_PUBLISH=false`, `PUBLISHING_MODE=manual_export`.
+- There is no further planned task. Remaining decisions belong to the owner:
+  1. Read `docs/operator-runbook.md` and `docs/pilot-results.md`, then tag `v0.1.0` yourself if satisfied
+     (nothing here pushes or tags).
+  2. Decide whether to run the paid pilot. It needs your key, a verified price, five images cleared for
+     cloud use and a live approval envelope; `scripts/live-preflight.sh` shows what is missing.
+  3. Optional follow-ups noted as known limitations: uploaded narration and Azure voice wiring, dashboard
+     screens for products/campaigns/schedules, OpenAPI-generated TypeScript types, connecting the pipeline
+     to Azure DevOps.

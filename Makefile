@@ -29,7 +29,7 @@ endif
 -include .env.test.local
 export
 
-.PHONY: test-dashboard test-e2e help doctor build infra-up infra-down migrate owner-init test-unit test-integration test-media smoke-mock verify env-check clean
+.PHONY: verify-fast dev dev-stop backup restore-test test-dashboard test-e2e help doctor build infra-up infra-down migrate owner-init test-unit test-integration test-media smoke-mock verify env-check clean
 
 help:
 	@echo "Content Factory — M0 commands"
@@ -41,7 +41,11 @@ help:
 	@echo "  make test-dashboard    Typecheck and unit-test the dashboard"
 	@echo "  make test-e2e          Playwright specs against a scratch DB, API, worker and dashboard"
 	@echo "  make smoke-mock        Run the offline end-to-end pipeline 10 times (mock providers only)"
-	@echo "  make verify            Build + unit tests + integration tests when configured"
+	@echo "  make verify            Every gate (secret scan, build, tests, media, e2e); BLOCKED is not a pass"
+	@echo "  make verify-fast       The same without media and end-to-end"
+	@echo "  make dev / dev-stop    Start / stop the local stack on loopback (keeps the database)"
+	@echo "  make backup            Verified backup into ~/ContentFactoryBackups"
+	@echo "  make restore-test      Backup, restore into a scratch DB, verify, clean up"
 	@echo "  make env-check         Verify local .env exists and is not tracked"
 
 doctor:
@@ -91,7 +95,23 @@ test-e2e: build
 smoke-mock:
 	@./scripts/smoke-mock.sh $(ROUNDS)
 
-verify: build test-unit
+verify:
+	@./scripts/verify-all.sh
+
+verify-fast:
+	@./scripts/verify-all.sh --fast
+
+dev:
+	@./scripts/dev-start.sh
+
+dev-stop:
+	@./scripts/dev-stop.sh
+
+backup:
+	@./scripts/backup.sh
+
+restore-test:
+	@./scripts/restore-test.sh
 
 env-check:
 	@test -f .env || (echo ".env is missing; copy .env.example and fill local values" && exit 2)

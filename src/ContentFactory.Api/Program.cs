@@ -152,6 +152,7 @@ app.MapGet("/health/ready", async (AppDbContext db, CancellationToken ct) =>
 
 app.MapAuthEndpoints();
 app.MapProductEndpoints();
+app.MapChannelEndpoints();
 app.MapCampaignEndpoints();
 app.MapAssetEndpoints();
 app.MapReviewEndpoints();
