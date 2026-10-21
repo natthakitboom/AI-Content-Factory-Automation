@@ -28,6 +28,7 @@
     </PackageReference>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Npgsql" />
+    <PackageReference Include="SkiaSharp" />
   </ItemGroup>
 
 </Project>

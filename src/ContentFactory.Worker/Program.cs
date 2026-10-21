@@ -3,6 +3,7 @@ using ContentFactory.Infrastructure.Billing;
 using ContentFactory.Infrastructure.Jobs;
 using ContentFactory.Infrastructure.Media;
 using ContentFactory.Infrastructure.Persistence;
+using ContentFactory.Infrastructure.Providers.Fal;
 using ContentFactory.Infrastructure.Storage;
 using ContentFactory.Worker;
 using ContentFactory.Worker.Handlers;
@@ -37,6 +38,11 @@ builder.Services.AddScoped<ITechnicalQa, TechnicalQa>();
 builder.Services.AddScoped<TechnicalQaHandler>();
 builder.Services.AddScoped<IJobHandler>(services =>
     services.GetRequiredService<TechnicalQaHandler>());
+builder.Services.AddSingleton(FalOptions.FromEnvironment());
+builder.Services.AddHttpClient<IVideoProvider, FalVideoProvider>();
+builder.Services.AddScoped<SubmitVideoHandler>();
+builder.Services.AddScoped<IJobHandler>(services =>
+    services.GetRequiredService<SubmitVideoHandler>());
 builder.Services.AddSingleton<ResourceGovernor>();
 builder.Services.AddScoped<PostgresJobStore>(services =>
     new PostgresJobStore(

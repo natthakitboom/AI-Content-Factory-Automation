@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://fal.ai/models/fal-ai/wan/v2.2-a14b/image-to-video/turbo/input.schema.json",
+  "title": "fal-ai/wan/v2.2-a14b/image-to-video/turbo input",
+  "description": "Input schema for the Wan Turbo image-to-video model as used by the Content Factory adapter. Captured from https://fal.ai/models/fal-ai/wan/v2.2-a14b/image-to-video/turbo/api on 2026-10-21 without calling inference.",
+  "type": "object",
+  "required": [
+    "image_url",
+    "prompt"
+  ],
+  "properties": {
+    "image_url": {
+      "type": "string",
+      "description": "URL of the input image. The adapter sends a base64 data URI of a normalized JPEG/PNG at most 1280 px on the long edge and at most 3 MiB before base64."
+    },
+    "prompt": {
+      "type": "string",
+      "description": "Text prompt that guides video generation."
+    },
+    "seed": {
+      "type": "integer",
+      "description": "Random seed for reproducibility."
+    },
+    "resolution": {
+      "type": "string",
+      "enum": ["480p", "580p", "720p"],
+      "default": "720p"
+    },
+    "aspect_ratio": {
+      "type": "string",
+      "enum": ["auto", "16:9", "9:16", "1:1"],
+      "default": "auto"
+    },
+    "enable_safety_checker": {
+      "type": "boolean",
+      "default": true
+    },
+    "enable_output_safety_checker": {
+      "type": "boolean",
+      "default": false
+    },
+    "enable_prompt_expansion": {
+      "type": "boolean",
+      "default": false
+    },
+    "acceleration": {
+      "type": "string",
+      "enum": ["none", "regular"],
+      "default": "regular"
+    },
+    "video_quality": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "maximum"],
+      "default": "high"
+    },
+    "video_write_mode": {
+      "type": "string",
+      "enum": ["fast", "balanced", "small"],
+      "default": "balanced"
+    },
+    "end_image_url": {
+      "type": "string",
+      "description": "URL of an optional end image. The adapter does not use this field in the basic template."
+    }
+  },
+  "additionalProperties": false
+}

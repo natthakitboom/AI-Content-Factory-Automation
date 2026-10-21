@@ -359,6 +359,7 @@ public sealed class AppDbContext : DbContext
             entity.Property(x => x.ProviderRequestId).HasMaxLength(256);
             entity.Property(x => x.StatusUrl).HasMaxLength(2048);
             entity.Property(x => x.ResponseUrl).HasMaxLength(2048);
+            entity.Property(x => x.CancelUrl).HasMaxLength(2048);
             entity.Property(x => x.Status).HasMaxLength(32).IsRequired();
             entity.HasOne<Job>().WithMany().HasForeignKey(x => x.JobId)
                 .OnDelete(DeleteBehavior.SetNull);

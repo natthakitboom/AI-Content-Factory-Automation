@@ -1288,6 +1288,11 @@ namespace ContentFactory.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("CancelUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("cancel_url");
+
                     b.Property<string>("ClientOperationId")
                         .IsRequired()
                         .HasMaxLength(256)

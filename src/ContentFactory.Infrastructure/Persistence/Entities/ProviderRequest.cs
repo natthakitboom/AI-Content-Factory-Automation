@@ -11,6 +11,7 @@ public sealed class ProviderRequest
     public string? ProviderRequestId { get; set; }
     public string? StatusUrl { get; set; }
     public string? ResponseUrl { get; set; }
+    public string? CancelUrl { get; set; }
     public string Status { get; set; } = "prepared";
     public DateTimeOffset? SubmittedAt { get; set; }
     public DateTimeOffset? LastCheckedAt { get; set; }
