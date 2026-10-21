@@ -1558,6 +1558,28 @@ namespace ContentFactory.Infrastructure.Persistence.Migrations
                     b.ToTable("schedule_occurrences", "app");
                 });
 
+            modelBuilder.Entity("ContentFactory.Infrastructure.Persistence.Entities.SystemFlag", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("key");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("value");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("system_flags", "app");
+                });
+
             modelBuilder.Entity("ContentFactory.Infrastructure.Persistence.Entities.VideoVersion", b =>
                 {
                     b.Property<Guid>("Id")

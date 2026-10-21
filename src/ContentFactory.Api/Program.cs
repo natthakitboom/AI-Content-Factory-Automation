@@ -131,6 +131,7 @@ app.UseMiddleware<ExceptionMappingMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<CsrfMiddleware>();
+app.UseMiddleware<QuiesceMiddleware>();
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "live" })).AllowAnonymous();
 app.MapGet("/health/ready", async (AppDbContext db, CancellationToken ct) =>

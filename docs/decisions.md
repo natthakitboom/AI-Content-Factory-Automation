@@ -493,3 +493,19 @@ this file explains local choices and their consequences.
   numbers), separates currencies, and is produced per source because two sources can report the same
   post. The CSV reader never evaluates formulas and enforces size limits.
 
+## ADR-0022: Retention, backup and restore safety (T20)
+
+- Decision: `RetentionService` removes an asset only when it is older than 14 days and referenced by
+  no foreign key, export package, stored snapshot/script/manifest, or unfinished job; temp files
+  older than 24 h are removed only when no job is running. `DiskGuard` makes `render_video` return
+  `DISK_PRESSURE` below `MIN_FREE_DISK_GIB` or `MIN_FREE_DISK_RATIO`; it never deletes anything.
+- Decision: backup quiesces through a durable `system_flags.write_quiesce` flag (the API refuses
+  mutating requests with 503) and pauses queued jobs, drains local running jobs, dumps with the
+  container's own `pg_dump` (no host client or password on a command line), copies every asset while
+  hashing it, and writes an owner-only set with no environment secrets. In-flight cloud requests are
+  listed in the manifest; a backup cannot stop cloud billing.
+- Decision: restore needs a new database name, a new or empty data root and the typed confirmation,
+  verifies every hash before creating anything, cleans up after a failure, and starts with
+  `paid_lanes_paused=true` and all unfinished jobs paused. `submit_video` returns `PAID_LANES_PAUSED`
+  until the operator runs `resume-paid-lanes --reconciled`.
+

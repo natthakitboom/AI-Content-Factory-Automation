@@ -4,6 +4,7 @@ using ContentFactory.Core.Abstractions;
 using ContentFactory.Core.Exceptions;
 using ContentFactory.Infrastructure.Media;
 using ContentFactory.Infrastructure.Persistence;
+using ContentFactory.Worker.Health;
 using Microsoft.EntityFrameworkCore;
 
 namespace ContentFactory.Worker.Handlers;
@@ -18,9 +19,17 @@ public sealed class RenderVideoHandler : IJobHandler
 
     private readonly AppDbContext _db;
     private readonly IVideoRenderer _renderer;
+    private readonly DiskGuard? _disk;
+    private readonly string? _dataRoot;
 
-    public RenderVideoHandler(AppDbContext db, IVideoRenderer renderer)
+    public RenderVideoHandler(
+        AppDbContext db,
+        IVideoRenderer renderer,
+        DiskGuard? disk = null,
+        string? dataRoot = null)
     {
+        _disk = disk;
+        _dataRoot = dataRoot;
         _db = db ?? throw new ArgumentNullException(nameof(db));
         _renderer = renderer ?? throw new ArgumentNullException(nameof(renderer));
     }
@@ -36,6 +45,12 @@ public sealed class RenderVideoHandler : IJobHandler
         if (payload?.VideoVersionId is not { } versionId)
         {
             return Blocked("RENDER_PAYLOAD_INVALID");
+        }
+
+        if (_disk is not null && _dataRoot is not null && _disk.Evaluate(_dataRoot).UnderPressure)
+        {
+            // Nothing is rendered or deleted; free space, then re-queue the job.
+            return Blocked("DISK_PRESSURE");
         }
 
         var version = await _db.VideoVersions.SingleOrDefaultAsync(x => x.Id == versionId, ct);

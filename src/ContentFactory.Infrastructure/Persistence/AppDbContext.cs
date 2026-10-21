@@ -48,6 +48,7 @@ public sealed class AppDbContext : DbContext
     public DbSet<Schedule> Schedules => Set<Schedule>();
     public DbSet<ScheduleOccurrence> ScheduleOccurrences => Set<ScheduleOccurrence>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
+    public DbSet<SystemFlag> SystemFlags => Set<SystemFlag>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -575,6 +576,14 @@ public sealed class AppDbContext : DbContext
             entity.HasIndex(x => new { x.ScheduleId, x.SlotKey })
                 .IsUnique()
                 .HasDatabaseName("ux_schedule_occurrences_schedule_slot");
+        });
+
+        modelBuilder.Entity<SystemFlag>(entity =>
+        {
+            entity.ToTable("system_flags");
+            entity.HasKey(x => x.Key);
+            entity.Property(x => x.Key).HasMaxLength(64);
+            entity.Property(x => x.Value).HasMaxLength(256).IsRequired();
         });
 
         modelBuilder.Entity<AuditEvent>(entity =>

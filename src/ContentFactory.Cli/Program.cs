@@ -47,10 +47,32 @@ internal static class CliEntryPoint
             return await new ReconcileCommand(db).NoChargeAsync(args);
         }
 
+        if (args.Length > 0 && args[0] == "backup")
+        {
+            return await new BackupCommand(db).BackupAsync(args);
+        }
+
+        if (args.Length > 0 && args[0] == "restore")
+        {
+            return await BackupCommand.RestoreAsync(args);
+        }
+
+        if (args.Length > 0 && args[0] == "cleanup")
+        {
+            return await new BackupCommand(db).CleanupAsync();
+        }
+
+        if (args.Length > 0 && args[0] == "resume-paid-lanes")
+        {
+            return await new BackupCommand(db).ResumePaidLanesAsync(args);
+        }
+
         Console.Error.WriteLine("Usage: ContentFactory.Cli init-owner [username]");
         Console.Error.WriteLine("Creates the single local owner with a hidden password prompt.");
         Console.Error.WriteLine("       ContentFactory.Cli reconcile-attach <row-id> <fal-request-id> <status-url> <response-url> [cancel-url]");
         Console.Error.WriteLine("       ContentFactory.Cli reconcile-no-charge <row-id> <reason...>");
+        Console.Error.WriteLine("       ContentFactory.Cli backup <new-directory> | cleanup | resume-paid-lanes --reconciled");
+        Console.Error.WriteLine("       ContentFactory.Cli restore <backup-dir> <new-database> <new-data-root> --confirm \"restore <new-database>\"");
         return 2;
     }
 }

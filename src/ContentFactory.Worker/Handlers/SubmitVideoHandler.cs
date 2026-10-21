@@ -78,6 +78,15 @@ public sealed class SubmitVideoHandler : IJobHandler
             return Blocked("SUBMIT_PAYLOAD_INVALID");
         }
 
+        // After a restore the ledger may be older than what was really sent to the provider,
+        // so no paid submission runs until the owner has reconciled and cleared the flag.
+        if (_videoProvider.IsBillable
+            && await _db.SystemFlags.AsNoTracking().AnyAsync(
+                x => x.Key == "paid_lanes_paused" && x.Value == "true", ct))
+        {
+            return Blocked("PAID_LANES_PAUSED");
+        }
+
         var existing = await _db.ProviderRequests
             .AsNoTracking()
             .SingleOrDefaultAsync(

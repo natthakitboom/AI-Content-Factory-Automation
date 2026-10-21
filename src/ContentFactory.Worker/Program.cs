@@ -124,7 +124,13 @@ builder.Services.AddScoped<PlanScriptHandler>();
 builder.Services.AddScoped<PrepareVisualsHandler>();
 builder.Services.AddScoped<SynthesizeVoiceHandler>();
 builder.Services.AddScoped<CompileTimelineHandler>();
-builder.Services.AddScoped<RenderVideoHandler>();
+builder.Services.AddSingleton(DiskGuardOptions.FromEnvironment());
+builder.Services.AddSingleton(services => new DiskGuard(services.GetRequiredService<DiskGuardOptions>()));
+builder.Services.AddScoped(services => new RenderVideoHandler(
+    services.GetRequiredService<AppDbContext>(),
+    services.GetRequiredService<IVideoRenderer>(),
+    services.GetRequiredService<DiskGuard>(),
+    services.GetRequiredService<StorageOptions>().DataRoot));
 builder.Services.AddScoped<PrepareReviewHandler>();
 builder.Services.AddScoped<IJobHandler>(s => s.GetRequiredService<SubmitVideoHandler>());
 builder.Services.AddScoped<IJobHandler>(s => s.GetRequiredService<PollVideoHandler>());
