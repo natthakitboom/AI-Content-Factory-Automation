@@ -13,7 +13,7 @@ public static class AnalyticsEndpoints
 {
     public static IEndpointRouteBuilder MapAnalyticsEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapPost("/api/v1/metrics/imports", ImportAsync).RequireAuthorization().DisableAntiforgery();
+        endpoints.MapPost("/api/v1/metrics/imports", ImportAsync).RequireAuthorization();
         endpoints.MapGet("/api/v1/analytics/overview", OverviewAsync).RequireAuthorization();
         return endpoints;
     }

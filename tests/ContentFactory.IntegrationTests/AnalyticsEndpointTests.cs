@@ -22,6 +22,23 @@ public sealed class AnalyticsEndpointTests
     }
 
     [Fact]
+    public async Task ImportWithoutACsrfTokenIsRejected()
+    {
+        var client = await _fixture.CreateLoggedInClientAsync();
+        client.DefaultRequestHeaders.Remove("X-CSRF-TOKEN");
+        using var form = new MultipartFormDataContent
+        {
+            { new ByteArrayContent(Encoding.UTF8.GetBytes("post_url,views\nx,1\n")), "file", "m.csv" },
+            { new StringContent("{}"), "mapping" }
+        };
+
+        var response = await client.PostAsync("/api/v1/metrics/imports", form);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("CSRF_INVALID", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task EmptyOverviewHasNoData()
     {
         var client = await _fixture.CreateLoggedInClientAsync();
