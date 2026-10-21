@@ -8,8 +8,10 @@
     <Project Path="src/ContentFactory.Worker/ContentFactory.Worker.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/ContentFactory.E2eSeed/ContentFactory.E2eSeed.csproj" />
     <Project Path="tests/ContentFactory.IntegrationTests/ContentFactory.IntegrationTests.csproj" />
     <Project Path="tests/ContentFactory.MediaTests/ContentFactory.MediaTests.csproj" />
+    <Project Path="tests/ContentFactory.TestSupport/ContentFactory.TestSupport.csproj" />
     <Project Path="tests/ContentFactory.UnitTests/ContentFactory.UnitTests.csproj" />
   </Folder>
 </Solution>

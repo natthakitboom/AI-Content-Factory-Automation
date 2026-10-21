@@ -1,7 +1,7 @@
 # Development progress
 
 ## Current milestone
-M1 complete through T15 (T15 done; T16 next, dashboard work blocked on Node pin)
+M1–M3 implemented through T21 (T22 paid pilot and T23 release not started; see Next exact task)
 
 ## Task status
 | Task | Status | Commit | Evidence | Blocker |
@@ -22,14 +22,29 @@ M1 complete through T15 (T15 done; T16 next, dashboard work blocked on Node pin)
 | T13 | done | 4a065a3 | `make build` → 0 warnings/0 errors; `make test-unit` → 95 passed; `make test-integration` → 93 passed; filtered `FalSubmitTests` → 7 passed; `make test-media` → exit 2 blocked; `dotnet ef migrations has-pending-model-changes` → no changes | No real FAL_KEY or paid call was made; the adapter is wired against a fake fal queue server; live mode remains closed |
 | T14 | done | (this commit) | `make build` → 0 warnings/0 errors; `make test-unit` → 95 passed; `make test-integration` → 113 passed; filtered `ProviderRecoveryTests` → 20 passed; `make test-media` → exit 2 blocked; no pending model changes; `make migrate` applied `AddProviderRequestOutputAsset` | No real FAL_KEY, DNS lookup or paid call; everything ran against a fake network. Cancel verb PUT confirmed against fal docs; live behaviour of status/response/cancel remains unverified until an approved live smoke |
 | T15 | done | (this commit) | `make build` → 0 warnings/0 errors; `make test-unit` → 95 passed; `make test-integration` → 133 passed; filtered `EndToEndPipelineTests` → 5 passed; `make test-media` → 9 passed (real FFmpeg 9.0.2 with libass); `make smoke-mock` → 10/10 rounds OK; no pending model changes | Mock providers only. Real MP4 produced and probed (h264, 1080x1920, aac). Uploaded-narration and Azure voice are not wired into the worker; only one motion scene per run; dashboard banner is an API endpoint until a UI exists |
-| T16 (API) | partial | (this commit) | `ApprovalTests` → 10 passed; `make test-integration` → 154 passed; UI + Playwright spec **not done** (no dashboard yet, Node pin) | `apps/dashboard` does not exist; `review.spec.ts` pending |
-| T17 (API) | partial | (this commit) | `ExportTests` → 9 passed, `ExportEndpointTests` → 2 passed; ZIP verified byte-for-byte with sha256sums | UI + `export.spec.ts` pending; migration `AddVideoVersionOutputs` applied |
+| T16 | done | (this commit) | `ApprovalTests` → 10 passed; vitest `review.test.ts`; Playwright `review.spec.ts` (preview/originals/claims/cost, 7-item checklist by keyboard, reject needs comment, caption edit → worker rebuilds → new version awaiting review with no export panel) | UI was written before its Playwright spec, so the e2e RED step was not observed; API types are hand-written (no OpenAPI document exists) |
+| T17 | done | (this commit) | `ExportTests` 9 + `ExportEndpointTests` 2 passed; Playwright `export.spec.ts` downloads the ZIP, verifies every sha256 and ffprobes the MP4, replay keeps one package, publication link stays `unknown` without evidence | Nothing is posted by the system; the owner records a post by hand |
 | T18 | done (API/worker) | (this commit) | `ScheduleTimezoneTests` → 6 passed (unit); `ScheduleRecoveryTests` → 7 passed (PostgreSQL); schedules default disabled; worker enqueues a `schedule_tick` job per minute only when `ENABLE_SCHEDULES=true` | No schedule UI yet; a failed run for a slot is audited and not retried |
-| T19 (API) | partial | (this commit) | `MetricsTests` → 10 passed (unit); `MetricsImportTests` → 7 passed; `AnalyticsEndpointTests` → 2 passed | analytics page UI pending (no dashboard); overview is per source and never merges sources |
+| T19 | done | (this commit) | `MetricsTests` 10 (unit), `MetricsImportTests` 7, `AnalyticsEndpointTests` 2; Playwright `metrics.spec.ts` (empty state, repeat import adds nothing, missing values show "No data") | Overview is per source and never merges sources |
 | T20 | done | (this commit) | `BackupRestoreTests` → 8 passed (4 use the real `pg_dump`/`pg_restore` in the project container, skipped if Docker is absent); `QuiesceTests` → 1 passed; `make test-integration` → 179 passed; real `scripts/backup.sh` run produced owner-only files (0600/0700) | Restore tested into scratch DBs only; `restore.sh` needs the operator to type the confirmation; off-device encrypted copy is the operator's job |
-| T21 (API) | partial | (this commit) | `OperationsTests` → 6 passed (empty state, reserved vs settled, no blind retry for uncertain jobs, pause persists, no keys in payloads, job timeline) | Dashboard pages and Playwright specs pending; pause is now a durable flag the worker honors for heavy-local and cloud-submit lanes |
+| T21 | done | (this commit) | `OperationsTests` 6 passed; Playwright `operations.spec.ts` (MOCK banner, reserved vs spent, no retry for uncertain jobs, pause persists, no keys in payloads, diagnostics, keyboard + 390 px width) | Thermal temperature is reported as unavailable, not invented |
 
 ## Last verified commands
+
+### Dashboard (T16, T17, T19, T21 UI) and test infrastructure
+Created: `apps/dashboard` (Next.js 16.4.2, React 19.3.1, TypeScript 5.9.3 strict, Vitest 5.0.5,
+Playwright 1.64.1; every version pinned exactly; browser traffic goes through a same-origin
+`/api` rewrite to the loopback API, so there is no CORS and no secret in the client),
+`tests/ContentFactory.TestSupport` (`PipelineHarness`, `ReviewSeed`), `tests/ContentFactory.E2eSeed`
+(scratch `cf_test_e2e_*` database filled by the real mock pipeline), `apps/dashboard/scripts/run-e2e.mjs`.
+
+- Node 24.22.0 was installed user-local at `~/.node/v24.22.0` from nodejs.org (SHA-256 verified,
+  no sudo) to match `.node-version`; the Makefile puts it on `PATH`. Chromium for Playwright was
+  installed by `npx playwright install chromium` into the user cache.
+- `make test-dashboard` → typecheck clean, vitest 12 passed (3 files).
+- `make test-e2e` → 30 passed, 4 skipped (state-changing specs run once on desktop; the 390 px project
+  runs the read-only checks). Real API, worker, PostgreSQL and FFmpeg; mock providers only.
+- `make test-unit` 111, `make test-integration` 185, `make test-media` 9, all passed; `make build` 0/0.
 
 ### T15
 Created: `src/ContentFactory.Worker/Handlers/{PlanScript,PrepareVisuals,SynthesizeVoice,CompileTimeline,RenderVideo,PrepareReview}Handler.cs`,
@@ -937,11 +952,16 @@ it was not moved or rewritten.
 - Disabled; no paid requests authorized and none made.
 
 ## Next exact task
-- Task ID: T16 — Owner review UI and approval bound to the exact version
-- Inputs/files to read: plan T16, `IReviewService`, `ReviewDecision`, `ValidationReport`,
-  `Approval` entity, the `awaiting_review` video version produced by T15.
-- Prerequisite: T02, T12, T15. Keep `ALLOW_PAID_APIS=false`, `AUTO_PUBLISH=false` and
-  `PUBLISHING_MODE=manual_export`.
-- Remaining blockers: Node is 26.11.1 but `.node-version` pins 24.22.0, so the Next.js dashboard
-  and Playwright specs of T16/T21 cannot be run as pinned; port 3000 was free at the last doctor
-  run. A Thai-capable font file must be supplied through `CAPTION_FONT_FILE` for worker renders.
+- Task ID: T22 — Failure injection, local benchmark and optional paid pilot
+- State: not started. Everything up to T21 is implemented and verified offline with mock providers.
+- What can be done without the owner: the failure-injection tests (`FailureInjectionTests`) and the
+  local benchmark script, both offline.
+- What must NOT be done without the owner: the live preflight/pilot steps (`live-preflight.sh`,
+  `live-pilot.sh`). They need a real FAL_KEY, a verified price snapshot, a live approval envelope and
+  the owner's explicit confirmation; none exists. Keep `ALLOW_PAID_APIS=false`, `AUTO_PUBLISH=false`
+  and `PUBLISHING_MODE=manual_export`.
+- T23 (CI, packaging, runbook, release handoff) follows T22 and states the release is mock/local-only
+  until a pilot is run.
+- Open environment notes: `make doctor` still reports port 54329 "in use" because that is the
+  project's own PostgreSQL container; supply a licensed Thai font through `CAPTION_FONT_FILE` for
+  production renders (the e2e run uses the macOS Thonburi file already on the machine).

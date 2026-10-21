@@ -75,13 +75,13 @@ public sealed class EndToEndPipelineTests : IAsyncLifetime
     public async Task TemplateOnlyProducesReviewableMp4()
     {
         await using var db = _fixture.CreateContext();
-        var harness = new Harness(db, _root);
+        var harness = new PipelineHarness(db, _root);
         var campaignId = await harness.SeedCampaignAsync(VideoMode.TemplateOnly);
 
         var run = await harness.EnqueueAsync(campaignId);
         await harness.PumpAsync();
 
-        await harness.AssertNoFailedJobsAsync();
+        Assert.Null(await harness.UnfinishedWorkAsync());
         var version = await db.VideoVersions
             .AsNoTracking()
             .SingleAsync(x => x.ContentRevisionId == run.RevisionId);
@@ -112,13 +112,13 @@ public sealed class EndToEndPipelineTests : IAsyncLifetime
     public async Task HybridMockUsesMotionAsset()
     {
         await using var db = _fixture.CreateContext();
-        var harness = new Harness(db, _root);
+        var harness = new PipelineHarness(db, _root);
         var campaignId = await harness.SeedCampaignAsync(VideoMode.HybridMotion);
 
         var run = await harness.EnqueueAsync(campaignId, cloudVideoSceneLimit: 1);
         await harness.PumpAsync();
 
-        await harness.AssertNoFailedJobsAsync();
+        Assert.Null(await harness.UnfinishedWorkAsync());
         var request = await db.ProviderRequests.AsNoTracking().SingleAsync();
         Assert.Equal("mock", request.Provider);
         Assert.Equal("succeeded", request.Status);
@@ -196,7 +196,7 @@ public sealed class EndToEndPipelineTests : IAsyncLifetime
             falOptions,
             TimeProvider.System,
             budget);
-        var harness = new Harness(db, Path.Combine(_root, "paid-off-seed"));
+        var harness = new PipelineHarness(db, Path.Combine(_root, "paid-off-seed"));
         var campaignId = await harness.SeedCampaignAsync(VideoMode.HybridMotion);
         var image = await db.Assets.AsNoTracking().FirstAsync(x => x.Kind == AssetKind.Image);
         var request = new VideoGenerationRequest(
@@ -245,265 +245,6 @@ public sealed class EndToEndPipelineTests : IAsyncLifetime
         {
             Count++;
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError));
-        }
-    }
-
-    private sealed record Probed(
-        string VideoCodec, int Width, int Height, string AudioCodec, double DurationSeconds);
-
-    private sealed class Harness
-    {
-        private readonly AppDbContext _db;
-        private readonly string _root;
-        private readonly StorageOptions _storage;
-        private readonly SafeProcessRunner _runner = new();
-        private readonly PostgresJobStore _store;
-        private readonly JobDispatcher _dispatcher;
-        private readonly OutboxDispatcher _outbox;
-        private readonly FileSystemAssetStore _assets;
-        private readonly DateTimeOffset _startedAt = DateTimeOffset.UtcNow;
-
-        public Harness(AppDbContext db, string root)
-        {
-            _db = db;
-            _root = root;
-            Directory.CreateDirectory(root);
-            _storage = new StorageOptions { DataRoot = Path.Combine(root, "data") };
-            _assets = new FileSystemAssetStore(db, _storage, TimeProvider.System);
-            _store = new PostgresJobStore(db, TimeProvider.System);
-            _outbox = new OutboxDispatcher(db, _store, TimeProvider.System);
-
-            Media = new MockMediaHandler(token => MockClipGenerator.GenerateAsync(_runner, token));
-            Video = new MockVideoProvider();
-
-            var fontFingerprint = new string('a', 64);
-            var budget = new BudgetOptions { AllowPaidApis = false };
-            var guard = new PostgresBudgetGuard(
-                db, budget, new LiveApprovalGuard(budget, TimeProvider.System));
-            var falOptions = new FalOptions();
-            var captions = new CaptionLayout(
-                new ConservativeTextMeasurer(), new CaptionLayoutOptions());
-            var renderer = new FfmpegVideoRenderer(
-                _assets,
-                _storage,
-                _runner,
-                new EncoderProbe(
-                    _runner,
-                    _storage,
-                    new EncoderProbeOptions { FontFingerprint = fontFingerprint }),
-                captions,
-                new FfmpegRenderOptions());
-            var voice = new VoiceAssembler(
-                _assets,
-                new FfprobeAudioProbe(_assets, _storage, _runner),
-                new FfmpegAudioConcatenator(_assets, _storage, _runner),
-                new MemoryVoiceAssetCache());
-
-            IJobHandler[] handlers =
-            [
-                new PlanScriptHandler(db, new MockScriptPlanner(), new ScriptValidator(), TimeProvider.System),
-                new PrepareVisualsHandler(db, TimeProvider.System),
-                new SynthesizeVoiceHandler(db, voice, new MockVoiceProvider(_assets), new VoiceHandlerOptions("mock", "mock", "mock-v1", "mock-voice-1")),
-                new SubmitVideoHandler(db, Video, guard, new PriceSnapshotService(db, budget), falOptions, TimeProvider.System),
-                new PollVideoHandler(db, Video, TimeProvider.System),
-                new DownloadVideoHandler(
-                    db,
-                    Video,
-                    new SafeMediaDownloader(
-                        new HttpClient(Media),
-                        new SafeMediaDownloaderOptions(),
-                        new MockHostResolver()),
-                    _assets,
-                    guard,
-                    TimeProvider.System),
-                new CompileTimelineHandler(
-                    db,
-                    new TimelineCompiler(new TimelineOptions { FontFingerprint = fontFingerprint })),
-                new RenderVideoHandler(db, renderer),
-                new TechnicalQaHandler(db, new TechnicalQa(_assets, _storage, _runner), TimeProvider.System),
-                new PrepareReviewHandler(db)
-            ];
-            _dispatcher = new JobDispatcher(
-                _store,
-                handlers,
-                new ResourceGovernor(),
-                NullLogger<JobDispatcher>.Instance,
-                TimeProvider.System);
-        }
-
-        public MockMediaHandler Media { get; }
-
-        public MockVideoProvider Video { get; }
-
-        public async Task<Guid> SeedCampaignAsync(VideoMode mode)
-        {
-            var now = DateTimeOffset.UtcNow;
-            var product = new Product
-            {
-                Id = Guid.NewGuid(),
-                Title = "สินค้าทดสอบ pipeline",
-                Market = "TH",
-                Locale = "th-TH",
-                Version = 1,
-                CreatedAt = now,
-                UpdatedAt = now
-            };
-            var channel = new Channel
-            {
-                Id = Guid.NewGuid(),
-                Platform = "tiktok",
-                DisplayName = "Fixture channel",
-                Market = "TH",
-                Locale = "th-TH",
-                Timezone = "Asia/Bangkok",
-                Status = "active",
-                CapabilitiesJson = "{}"
-            };
-            var campaign = new Campaign
-            {
-                Id = Guid.NewGuid(),
-                ProductId = product.Id,
-                ChannelId = channel.Id,
-                Mode = mode,
-                Locale = "th-TH",
-                TargetDurationMs = 25_000,
-                BudgetUsd = 0m,
-                Status = "active",
-                Version = 1,
-                CreatedAt = now,
-                UpdatedAt = now
-            };
-            _db.Products.Add(product);
-            _db.Channels.Add(channel);
-            _db.Campaigns.Add(campaign);
-            foreach (var text in new[] { "ช่วยให้ผิวชุ่มชื้น", "เนื้อบางเบาและใช้ง่าย" })
-            {
-                _db.ProductClaims.Add(new ProductClaim
-                {
-                    Id = Guid.NewGuid(),
-                    ProductId = product.Id,
-                    Text = text,
-                    SourceReference = "owner-sheet-e2e",
-                    Status = "approved",
-                    VerifiedAt = now,
-                    CreatedAt = now
-                });
-            }
-
-            await _db.SaveChangesAsync();
-
-            await using var image = new MemoryStream(CreateJpeg());
-            await new AssetIngestService(_db, _assets).IngestAsync(
-                new AssetIngestRequest(
-                    image,
-                    "product.jpg",
-                    AssetKind.Image,
-                    "image/jpeg",
-                    "owner_attested",
-                    "synthetic fixture generated by the test",
-                    CloudUseAllowed: true,
-                    ProductId: product.Id),
-                default);
-            return campaign.Id;
-        }
-
-        public Task<RunEnqueued> EnqueueAsync(Guid campaignId, int cloudVideoSceneLimit = 0)
-        {
-            var campaign = _db.Campaigns.AsNoTracking().Single(x => x.Id == campaignId);
-            return new RunEnqueuer(_db, TimeProvider.System).EnqueueAsync(
-                new RunEnqueueCommand(
-                    campaignId,
-                    "e2e-" + Guid.NewGuid().ToString("N"),
-                    campaign.Mode,
-                    campaign.TargetDurationMs,
-                    AutoGenerateVoice: true,
-                    CloudVideoSceneLimit: cloudVideoSceneLimit,
-                    AllowPaidCloud: cloudVideoSceneLimit > 0),
-                default);
-        }
-
-        public async Task PumpAsync()
-        {
-            JobLane[] lanes =
-            [
-                JobLane.Control, JobLane.HeavyLocal, JobLane.CloudSubmit,
-                JobLane.CloudPoll, JobLane.Download
-            ];
-            for (var round = 0; round < 200; round++)
-            {
-                var worked = false;
-                foreach (var lane in lanes)
-                {
-                    var result = await _dispatcher.RunOnceAsync("e2e-worker", lane, default);
-                    worked |= result.Leased;
-                }
-
-                worked |= await _outbox.DispatchOnceAsync(
-                    new WorkflowOutboxHandler(), default) > 0;
-                if (!worked)
-                {
-                    return;
-                }
-            }
-
-            throw new Xunit.Sdk.XunitException("The pipeline did not settle within 200 rounds.");
-        }
-
-        public async Task AssertNoFailedJobsAsync()
-        {
-            _db.ChangeTracker.Clear();
-            var bad = await _db.Jobs
-                .AsNoTracking()
-                .Where(x => x.CreatedAt >= _startedAt && x.Status != "succeeded")
-                .Select(x => x.JobType + ":" + x.Status + ":" + x.LastErrorCode)
-                .ToListAsync();
-            var qa = await _db.VideoVersions.AsNoTracking()
-                .Where(x => x.CreatedAt >= _startedAt
-                    && (x.Status == "qa_failed" || x.Status == "blocked"))
-                .Select(x => x.QaJson)
-                .ToListAsync();
-            Assert.True(
-                bad.Count == 0,
-                "Unfinished jobs: " + string.Join(", ", bad) + " QA: " + string.Join(" | ", qa));
-        }
-
-        public async Task<Probed> ProbeAsync(Guid assetId)
-        {
-            var asset = await _db.Assets.AsNoTracking().SingleAsync(x => x.Id == assetId);
-            var path = Path.Combine(_storage.DataRoot, asset.RelativePath);
-            var result = await _runner.RunAsync(
-                "ffprobe",
-                [
-                    "-v", "error", "-show_entries",
-                    "stream=codec_type,codec_name,width,height", "-show_entries",
-                    "format=duration", "-of", "json", path
-                ],
-                TimeSpan.FromSeconds(30),
-                default);
-            Assert.Equal(0, result.ExitCode);
-            using var document = JsonDocument.Parse(result.StandardOutput);
-            var streams = document.RootElement.GetProperty("streams").EnumerateArray().ToList();
-            var video = streams.First(x => x.GetProperty("codec_type").GetString() == "video");
-            var audio = streams.First(x => x.GetProperty("codec_type").GetString() == "audio");
-            return new Probed(
-                video.GetProperty("codec_name").GetString()!,
-                video.GetProperty("width").GetInt32(),
-                video.GetProperty("height").GetInt32(),
-                audio.GetProperty("codec_name").GetString()!,
-                double.Parse(
-                    document.RootElement.GetProperty("format").GetProperty("duration").GetString()!,
-                    CultureInfo.InvariantCulture));
-        }
-
-        private static byte[] CreateJpeg()
-        {
-            using var bitmap = new SKBitmap(540, 960);
-            using var canvas = new SKCanvas(bitmap);
-            canvas.Clear(new SKColor(40, 90, 160));
-            using var paint = new SKPaint { Color = new SKColor(240, 240, 240), IsAntialias = true };
-            canvas.DrawCircle(270, 480, 160, paint);
-            using var image = SKImage.FromBitmap(bitmap);
-            return image.Encode(SKEncodedImageFormat.Jpeg, 90).ToArray();
         }
     }
 }

@@ -31,6 +31,7 @@
     <ProjectReference Include="..\..\src\ContentFactory.Worker\ContentFactory.Worker.csproj" />
     <ProjectReference Include="..\..\src\ContentFactory.Api\ContentFactory.Api.csproj" />
     <ProjectReference Include="..\..\src\ContentFactory.Cli\ContentFactory.Cli.csproj" />
+    <ProjectReference Include="..\ContentFactory.TestSupport\ContentFactory.TestSupport.csproj" />
   </ItemGroup>
 
 </Project>

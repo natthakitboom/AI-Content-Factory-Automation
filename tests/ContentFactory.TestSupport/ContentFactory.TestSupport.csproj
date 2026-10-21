@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ContentFactory.Contracts\ContentFactory.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\ContentFactory.Core\ContentFactory.Core.csproj" />
+    <ProjectReference Include="..\..\src\ContentFactory.Infrastructure\ContentFactory.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\ContentFactory.Worker\ContentFactory.Worker.csproj" />
+  </ItemGroup>
+
+</Project>

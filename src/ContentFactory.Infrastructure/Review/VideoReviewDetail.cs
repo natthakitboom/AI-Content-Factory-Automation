@@ -22,6 +22,7 @@ public sealed record VideoReviewDetail(
     Guid Id,
     Guid RevisionId,
     Guid CampaignId,
+    Guid ChannelId,
     int VersionNo,
     string Status,
     string? ManifestSha256,

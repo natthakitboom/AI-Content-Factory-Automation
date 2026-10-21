@@ -509,3 +509,21 @@ this file explains local choices and their consequences.
   `paid_lanes_paused=true` and all unfinished jobs paused. `submit_video` returns `PAID_LANES_PAUSED`
   until the operator runs `resume-paid-lanes --reconciled`.
 
+## ADR-0023: Dashboard architecture and end-to-end harness (T16, T17, T19, T21)
+
+- Decision: `apps/dashboard` is a Next.js App Router app of client components. The browser only
+  talks to its own origin; `next.config.mjs` rewrites `/api/*` to the loopback API (and refuses a
+  non-loopback `API_ORIGIN`), so CORS stays off, the `SameSite=Strict` cookie is first-party and no
+  server secret is bundled. CSP, nosniff, no-referrer and frame denial are set as headers.
+- Decision: the API client sends the double-submit CSRF token on every mutation and refreshes it once
+  after a rejection. TypeScript DTOs are hand-written because the API publishes no OpenAPI document;
+  generating them is a follow-up.
+- Decision: status is always text plus a glyph, never colour alone; money is shown as reserved,
+  spent and held-for-unknown, never as one number; a missing metric shows "No data"; no job offers a
+  retry; the mode banner comes from `GET /api/v1/system/mode`.
+- Decision: the end-to-end run (`npm run test:e2e`) creates a scratch `cf_test_e2e_*` database,
+  fills it by running the real mock pipeline (so the MP4s are real), starts the API, the worker and
+  the dashboard on loopback, and drops everything afterwards. It never touches the app database.
+- Known gap: the UI for each task was written before its Playwright spec, so the e2e RED step was
+  not observed for T16/T17/T19/T21 (the API-level tests of those tasks did have a RED step).
+

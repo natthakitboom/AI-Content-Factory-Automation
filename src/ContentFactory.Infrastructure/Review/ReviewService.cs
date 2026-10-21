@@ -274,6 +274,8 @@ public sealed class ReviewService : IReviewService
             ?? throw new NotFoundException("VIDEO_VERSION_NOT_FOUND", "Video version not found.");
         var revision = await _db.ContentRevisions.AsNoTracking()
             .SingleAsync(x => x.Id == version.ContentRevisionId, ct);
+        var channelId = await _db.Campaigns.AsNoTracking()
+            .Where(x => x.Id == revision.CampaignId).Select(x => x.ChannelId).SingleAsync(ct);
         var script = revision.ScriptJson is null
             ? null
             : JsonSerializer.Deserialize<ScriptDocument>(revision.ScriptJson, JsonDefaults.Options);
@@ -307,6 +309,7 @@ public sealed class ReviewService : IReviewService
             version.Id,
             revision.Id,
             revision.CampaignId,
+            channelId,
             version.VersionNo,
             version.Status,
             version.ManifestSha256,
