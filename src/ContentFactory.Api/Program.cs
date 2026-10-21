@@ -53,6 +53,13 @@ builder.Services.AddScoped<ContentFactory.Infrastructure.Jobs.PostgresJobStore>(
     new ContentFactory.Infrastructure.Jobs.PostgresJobStore(
         services.GetRequiredService<AppDbContext>(),
         services.GetRequiredService<TimeProvider>()));
+builder.Services.AddScoped<ContentFactory.Infrastructure.Review.ReviewService>();
+builder.Services.AddScoped<IReviewService>(services =>
+    services.GetRequiredService<ContentFactory.Infrastructure.Review.ReviewService>());
+builder.Services.AddScoped<ContentFactory.Infrastructure.Export.ExportService>();
+builder.Services.AddScoped<IExportService>(services =>
+    services.GetRequiredService<ContentFactory.Infrastructure.Export.ExportService>());
+builder.Services.AddScoped<ContentFactory.Infrastructure.Export.PublicationRecorder>();
 builder.Services.AddSingleton<LoginThrottle>();
 builder.Services.AddSingleton<IPasswordHasher<OwnerUser>, PasswordHasher<OwnerUser>>();
 builder.Services.AddSingleton(new SecretRedactor(
@@ -137,6 +144,8 @@ app.MapAuthEndpoints();
 app.MapProductEndpoints();
 app.MapCampaignEndpoints();
 app.MapAssetEndpoints();
+app.MapReviewEndpoints();
+app.MapExportEndpoints();
 app.MapSystemEndpoints();
 
 app.Run();

@@ -271,6 +271,10 @@ public sealed class AppDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<Asset>().WithMany().HasForeignKey(x => x.OutputAssetId)
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Asset>().WithMany().HasForeignKey(x => x.ThumbnailAssetId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Asset>().WithMany().HasForeignKey(x => x.SubtitlesAssetId)
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.ContentRevisionId, x.VersionNo })
                 .IsUnique()
                 .HasDatabaseName("ux_video_versions_revision_version");

@@ -1596,6 +1596,14 @@ namespace ContentFactory.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("status");
 
+                    b.Property<Guid?>("SubtitlesAssetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subtitles_asset_id");
+
+                    b.Property<Guid?>("ThumbnailAssetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("thumbnail_asset_id");
+
                     b.Property<int>("VersionNo")
                         .HasColumnType("integer")
                         .HasColumnName("version_no");
@@ -1603,6 +1611,10 @@ namespace ContentFactory.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("OutputAssetId");
+
+                    b.HasIndex("SubtitlesAssetId");
+
+                    b.HasIndex("ThumbnailAssetId");
 
                     b.HasIndex("ContentRevisionId", "VersionNo")
                         .IsUnique()
@@ -1823,6 +1835,16 @@ namespace ContentFactory.Infrastructure.Persistence.Migrations
                     b.HasOne("ContentFactory.Infrastructure.Persistence.Entities.Asset", null)
                         .WithMany()
                         .HasForeignKey("OutputAssetId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ContentFactory.Infrastructure.Persistence.Entities.Asset", null)
+                        .WithMany()
+                        .HasForeignKey("SubtitlesAssetId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ContentFactory.Infrastructure.Persistence.Entities.Asset", null)
+                        .WithMany()
+                        .HasForeignKey("ThumbnailAssetId")
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 #pragma warning restore 612, 618

@@ -8,6 +8,8 @@ public sealed class VideoVersion
     public string? ManifestJson { get; set; }
     public string? ManifestSha256 { get; set; }
     public Guid? OutputAssetId { get; set; }
+    public Guid? ThumbnailAssetId { get; set; }
+    public Guid? SubtitlesAssetId { get; set; }
     public string? QaJson { get; set; }
     public string Status { get; set; } = "draft";
     public DateTimeOffset CreatedAt { get; set; }

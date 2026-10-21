@@ -65,6 +65,7 @@ public static class AssetPathResolver
             "audio/mp4" => ".m4a",
             "application/x-subrip" => ".srt",
             "text/vtt" => ".vtt",
+            "application/zip" => ".zip",
             _ => null
         };
 

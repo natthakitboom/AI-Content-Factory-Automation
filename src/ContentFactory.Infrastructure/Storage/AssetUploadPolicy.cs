@@ -89,6 +89,7 @@ public static class AssetUploadPolicy
         AssetKind.Audio => sniffed == AssetKind.Audio,
         AssetKind.Video => sniffed == AssetKind.Video,
         AssetKind.Subtitle => sniffed == AssetKind.Subtitle,
+        AssetKind.Archive => sniffed == AssetKind.Archive,
         _ => false
     };
 }

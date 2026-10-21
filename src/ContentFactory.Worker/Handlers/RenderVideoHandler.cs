@@ -72,6 +72,8 @@ public sealed class RenderVideoHandler : IJobHandler
         }
 
         version.OutputAssetId = result.Video.Id;
+        version.ThumbnailAssetId = result.Thumbnail.Id;
+        version.SubtitlesAssetId = result.Subtitles.Id;
         await _db.SaveChangesAsync(ct);
         return new JobOutcome(
             "succeeded",

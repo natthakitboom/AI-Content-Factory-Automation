@@ -452,3 +452,22 @@ this file explains local choices and their consequences.
   one motion scene, and prepare_review only confirms the version is awaiting review. Approval
   stays an owner action (T16).
 
+## ADR-0019: Review and export backend (T16/T17)
+
+- Decision: `ReviewService` lives in `Infrastructure/Review` (the plan names `Core/Review`, but Core
+  has no database access). An approval is bound to one manifest hash; the version row is locked
+  `FOR UPDATE`, the stored manifest hash is recomputed, QA must have passed and the seven E2
+  checklist items must all be true. The reviewer comes from the session claim only; there is no
+  bulk or "approve all" route.
+- Decision: a caption edit creates a new content revision (scenes, images and narration are reused)
+  and queues only `compile_timeline`, so a different manifest hash must be reviewed again and no
+  provider is called. The earlier approval stays attached to its own hash.
+- Decision: `video_versions` now records the thumbnail and subtitle assets
+  (`AddVideoVersionOutputs`); `AssetKind.Archive` is sniffed as `application/zip`, capped at
+  video + 32 MiB, and cannot be requested through the upload API.
+- Decision: `ExportService` re-checks at export time: approved status, approval hash equals the
+  recomputed manifest hash, current owner attestation for every source asset, an offer checked
+  within 24 hours, and an active channel in the product market. The ZIP is reproducible (fixed
+  entry times, fixed order), so replay returns the same asset. It records no publication; the
+  owner records one afterwards and the product-link status stays `unknown` without evidence.
+

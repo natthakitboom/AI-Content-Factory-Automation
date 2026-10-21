@@ -9,11 +9,13 @@ public sealed class StorageOptions
     public const long MaxImageBytes = 10L * 1024 * 1024;
     public const long MaxAudioBytes = 50L * 1024 * 1024;
     public const long MaxVideoBytes = 200L * 1024 * 1024;
+    public const long MaxArchiveBytes = MaxVideoBytes + (32L * 1024 * 1024);
 
     public string DataRoot { get; init; } = string.Empty;
     public long ImageBytesLimit { get; init; } = MaxImageBytes;
     public long AudioBytesLimit { get; init; } = MaxAudioBytes;
     public long VideoBytesLimit { get; init; } = MaxVideoBytes;
+    public long ArchiveBytesLimit { get; init; } = MaxArchiveBytes;
 
     public string AssetsRoot => Path.Combine(DataRoot, "assets", "sha256");
     public string TempRoot => Path.Combine(DataRoot, "temp");
@@ -36,6 +38,7 @@ public sealed class StorageOptions
         ContentFactory.Contracts.AssetKind.Image or ContentFactory.Contracts.AssetKind.Thumbnail => ImageBytesLimit,
         ContentFactory.Contracts.AssetKind.Audio or ContentFactory.Contracts.AssetKind.Subtitle => AudioBytesLimit,
         ContentFactory.Contracts.AssetKind.Video => VideoBytesLimit,
+        ContentFactory.Contracts.AssetKind.Archive => ArchiveBytesLimit,
         _ => ImageBytesLimit
     };
 

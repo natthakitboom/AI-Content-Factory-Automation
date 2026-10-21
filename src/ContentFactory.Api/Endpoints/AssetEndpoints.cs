@@ -103,6 +103,10 @@ public static class AssetEndpoints
         http.Response.Headers["ETag"] = etag;
         http.Response.Headers["Cache-Control"] = "private, no-cache";
         http.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        if (asset.Kind == ContentFactory.Contracts.AssetKind.Archive)
+        {
+            http.Response.Headers.ContentDisposition = $"attachment; filename=\"export-{asset.Sha256[..12]}.zip\"";
+        }
 
         if (MatchesETag(http.Request.Headers.IfNoneMatch.ToString(), etag))
         {

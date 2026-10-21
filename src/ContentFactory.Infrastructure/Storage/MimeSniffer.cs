@@ -62,6 +62,13 @@ public static class MimeSniffer
             return new SniffResult("audio/mpeg", AssetKind.Audio);
         }
 
+        // Local PK\x03\x04 header. Archives are produced only by the export service; the
+        // upload API cannot request this kind, so a ZIP sent as an image or video mismatches.
+        if (header.Length >= 4 && header[0] == 0x50 && header[1] == 0x4B && header[2] == 0x03 && header[3] == 0x04)
+        {
+            return new SniffResult("application/zip", AssetKind.Archive);
+        }
+
         if (LooksLikeWebVtt(header))
         {
             return new SniffResult("text/vtt", AssetKind.Subtitle);
