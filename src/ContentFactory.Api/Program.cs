@@ -61,6 +61,14 @@ builder.Services.AddScoped<IExportService>(services =>
     services.GetRequiredService<ContentFactory.Infrastructure.Export.ExportService>());
 builder.Services.AddScoped<ContentFactory.Infrastructure.Export.PublicationRecorder>();
 builder.Services.AddScoped<ContentFactory.Infrastructure.Analytics.MetricsImporter>();
+builder.Services.AddScoped<SystemFlagStore>();
+builder.Services.AddScoped<ContentFactory.Infrastructure.Operations.OperationsService>();
+builder.Services.AddSingleton<ContentFactory.Infrastructure.Media.IProcessRunner, ContentFactory.Infrastructure.Media.SafeProcessRunner>();
+builder.Services.AddHttpClient<ContentFactory.Infrastructure.Operations.DiagnosticsService>()
+    .AddTypedClient((http, services) => new ContentFactory.Infrastructure.Operations.DiagnosticsService(
+        http,
+        services.GetRequiredService<ContentFactory.Infrastructure.Media.IProcessRunner>(),
+        services.GetRequiredService<StorageOptions>().DataRoot));
 builder.Services.AddSingleton<LoginThrottle>();
 builder.Services.AddSingleton<IPasswordHasher<OwnerUser>, PasswordHasher<OwnerUser>>();
 builder.Services.AddSingleton(new SecretRedactor(

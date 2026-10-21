@@ -1,5 +1,7 @@
 using ContentFactory.Contracts;
 using ContentFactory.Infrastructure.Jobs;
+using ContentFactory.Infrastructure.Operations;
+using ContentFactory.Infrastructure.Storage;
 using ContentFactory.Infrastructure.Persistence;
 using ContentFactory.Worker.Handlers;
 using ContentFactory.Worker.Health;
@@ -35,6 +37,7 @@ public sealed class Worker(
 
     private DateTimeOffset _nextWatchdog = DateTimeOffset.MinValue;
     private DateTimeOffset _nextScheduleTick = DateTimeOffset.MinValue;
+    private DateTimeOffset _nextHeartbeat = DateTimeOffset.MinValue;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -68,11 +71,28 @@ public sealed class Worker(
                     _nextScheduleTick = now.AddMinutes(1);
                 }
 
+                var flags = scope.ServiceProvider.GetRequiredService<SystemFlagStore>();
+                if (now >= _nextHeartbeat)
+                {
+                    await flags.SetAsync(
+                        OperationsService.HeartbeatKey,
+                        now.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+                    _nextHeartbeat = now.AddSeconds(15);
+                }
+
+                var queuePaused = await flags.GetAsync(OperationsService.QueuePausedKey) == "true";
+
                 foreach (var lane in LaneOrder)
                 {
                     if (stoppingToken.IsCancellationRequested)
                     {
                         break;
+                    }
+
+                    if (queuePaused && lane is JobLane.HeavyLocal or JobLane.CloudSubmit)
+                    {
+                        // Pause withholds new heavy and paid work; running cloud requests continue.
+                        continue;
                     }
 
                     if (lane is JobLane.CloudSubmit or JobLane.CloudPoll

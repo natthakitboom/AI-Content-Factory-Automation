@@ -27,6 +27,7 @@ M1 complete through T15 (T15 done; T16 next, dashboard work blocked on Node pin)
 | T18 | done (API/worker) | (this commit) | `ScheduleTimezoneTests` → 6 passed (unit); `ScheduleRecoveryTests` → 7 passed (PostgreSQL); schedules default disabled; worker enqueues a `schedule_tick` job per minute only when `ENABLE_SCHEDULES=true` | No schedule UI yet; a failed run for a slot is audited and not retried |
 | T19 (API) | partial | (this commit) | `MetricsTests` → 10 passed (unit); `MetricsImportTests` → 7 passed; `AnalyticsEndpointTests` → 2 passed | analytics page UI pending (no dashboard); overview is per source and never merges sources |
 | T20 | done | (this commit) | `BackupRestoreTests` → 8 passed (4 use the real `pg_dump`/`pg_restore` in the project container, skipped if Docker is absent); `QuiesceTests` → 1 passed; `make test-integration` → 179 passed; real `scripts/backup.sh` run produced owner-only files (0600/0700) | Restore tested into scratch DBs only; `restore.sh` needs the operator to type the confirmation; off-device encrypted copy is the operator's job |
+| T21 (API) | partial | (this commit) | `OperationsTests` → 6 passed (empty state, reserved vs settled, no blind retry for uncertain jobs, pause persists, no keys in payloads, job timeline) | Dashboard pages and Playwright specs pending; pause is now a durable flag the worker honors for heavy-local and cloud-submit lanes |
 
 ## Last verified commands
 

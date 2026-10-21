@@ -117,6 +117,7 @@ builder.Services.AddScoped<PollVideoHandler>();
 builder.Services.AddScoped<DownloadVideoHandler>();
 builder.Services.AddScoped<ProviderReconciler>();
 builder.Services.AddScoped<RunEnqueuer>();
+builder.Services.AddScoped<SystemFlagStore>();
 builder.Services.AddScoped<ScheduleTicker>();
 builder.Services.AddScoped<ScheduleTickHandler>();
 builder.Services.AddScoped<IJobHandler>(s => s.GetRequiredService<ScheduleTickHandler>());

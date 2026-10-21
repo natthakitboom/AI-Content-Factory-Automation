@@ -1,4 +1,6 @@
 using ContentFactory.Infrastructure.Jobs;
+using ContentFactory.Infrastructure.Operations;
+using ContentFactory.Infrastructure.Storage;
 using ContentFactory.Infrastructure.Providers;
 
 namespace ContentFactory.Api.Endpoints;
@@ -16,6 +18,13 @@ public static class SystemEndpoints
         group.MapPost("/pause", PauseAsync);
         group.MapPost("/resume", ResumeAsync);
         group.MapGet("/mode", GetMode);
+        group.MapGet("/status", async (OperationsService s, CancellationToken ct) => Results.Ok(await s.StatusAsync(ct)));
+        group.MapGet("/jobs", async (string? status, int? limit, OperationsService s, CancellationToken ct)
+            => Results.Ok(await s.JobsAsync(status, limit ?? 50, ct)));
+        group.MapGet("/jobs/{id:guid}", async (Guid id, OperationsService s, CancellationToken ct)
+            => Results.Ok(await s.JobDetailAsync(id, ct)));
+        group.MapGet("/costs", async (OperationsService s, CancellationToken ct) => Results.Ok(await s.CostsAsync(ct)));
+        group.MapGet("/diagnostics", async (DiagnosticsService d, CancellationToken ct) => Results.Ok(await d.RunAsync(ct)));
 
         return endpoints;
     }
@@ -39,16 +48,20 @@ public static class SystemEndpoints
 
     private static async Task<IResult> PauseAsync(
         PostgresJobStore store,
+        SystemFlagStore flags,
         CancellationToken ct)
     {
+        await flags.SetAsync(OperationsService.QueuePausedKey, "true");
         await store.PauseAsync(ct);
         return Results.NoContent();
     }
 
     private static async Task<IResult> ResumeAsync(
         PostgresJobStore store,
+        SystemFlagStore flags,
         CancellationToken ct)
     {
+        await flags.SetAsync(OperationsService.QueuePausedKey, null);
         await store.ResumeAsync(ct);
         return Results.NoContent();
     }
