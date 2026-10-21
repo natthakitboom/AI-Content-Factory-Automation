@@ -471,3 +471,14 @@ this file explains local choices and their consequences.
   entry times, fixed order), so replay returns the same asset. It records no publication; the
   owner records one afterwards and the product-link status stays `unknown` without evidence.
 
+## ADR-0020: Scheduling policy (T18)
+
+- Decision: a slot is a local date, time and IANA zone (key `2026-10-21T09:00@Asia/Bangkok`,
+  formatted with the invariant culture so a Buddhist-calendar locale cannot change keys). A slot at
+  most 60 minutes old runs once; older slots are audited as `schedule.missed` and never replayed;
+  a non-existent DST local time is audited as `schedule.dst_skipped`; a repeated local time uses its
+  first occurrence. `schedules.last_slot` only moves forward, so each slot is judged once.
+- Decision: a scheduled run is created through `RunEnqueuer` with zero cloud scenes and no paid
+  approval, so budget, approval and resource guards still decide all spending. Daily limits count
+  `schedule_occurrences` in PostgreSQL, which survives restarts. Schedules are created disabled.
+

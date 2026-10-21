@@ -24,6 +24,7 @@ M1 complete through T15 (T15 done; T16 next, dashboard work blocked on Node pin)
 | T15 | done | (this commit) | `make build` → 0 warnings/0 errors; `make test-unit` → 95 passed; `make test-integration` → 133 passed; filtered `EndToEndPipelineTests` → 5 passed; `make test-media` → 9 passed (real FFmpeg 9.0.2 with libass); `make smoke-mock` → 10/10 rounds OK; no pending model changes | Mock providers only. Real MP4 produced and probed (h264, 1080x1920, aac). Uploaded-narration and Azure voice are not wired into the worker; only one motion scene per run; dashboard banner is an API endpoint until a UI exists |
 | T16 (API) | partial | (this commit) | `ApprovalTests` → 10 passed; `make test-integration` → 154 passed; UI + Playwright spec **not done** (no dashboard yet, Node pin) | `apps/dashboard` does not exist; `review.spec.ts` pending |
 | T17 (API) | partial | (this commit) | `ExportTests` → 9 passed, `ExportEndpointTests` → 2 passed; ZIP verified byte-for-byte with sha256sums | UI + `export.spec.ts` pending; migration `AddVideoVersionOutputs` applied |
+| T18 | done (API/worker) | (this commit) | `ScheduleTimezoneTests` → 6 passed (unit); `ScheduleRecoveryTests` → 7 passed (PostgreSQL); schedules default disabled; worker enqueues a `schedule_tick` job per minute only when `ENABLE_SCHEDULES=true` | No schedule UI yet; a failed run for a slot is audited and not retried |
 
 ## Last verified commands
 

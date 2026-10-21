@@ -116,6 +116,10 @@ builder.Services.AddScoped<SubmitVideoHandler>(services => new SubmitVideoHandle
 builder.Services.AddScoped<PollVideoHandler>();
 builder.Services.AddScoped<DownloadVideoHandler>();
 builder.Services.AddScoped<ProviderReconciler>();
+builder.Services.AddScoped<RunEnqueuer>();
+builder.Services.AddScoped<ScheduleTicker>();
+builder.Services.AddScoped<ScheduleTickHandler>();
+builder.Services.AddScoped<IJobHandler>(s => s.GetRequiredService<ScheduleTickHandler>());
 builder.Services.AddScoped<PlanScriptHandler>();
 builder.Services.AddScoped<PrepareVisualsHandler>();
 builder.Services.AddScoped<SynthesizeVoiceHandler>();

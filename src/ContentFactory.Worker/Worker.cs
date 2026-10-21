@@ -30,7 +30,11 @@ public sealed class Worker(
     private readonly string _workerName =
         $"worker-{Environment.MachineName}-{Environment.ProcessId}";
 
+    private readonly bool _schedulesEnabled = string.Equals(
+        Environment.GetEnvironmentVariable("ENABLE_SCHEDULES"), "true", StringComparison.OrdinalIgnoreCase);
+
     private DateTimeOffset _nextWatchdog = DateTimeOffset.MinValue;
+    private DateTimeOffset _nextScheduleTick = DateTimeOffset.MinValue;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -50,6 +54,18 @@ public sealed class Worker(
                     var watchdog = scope.ServiceProvider.GetRequiredService<LeaseWatchdog>();
                     didWork |= await watchdog.SweepAsync(stoppingToken) > 0;
                     _nextWatchdog = now.AddSeconds(30);
+                }
+
+                if (_schedulesEnabled && now >= _nextScheduleTick)
+                {
+                    // One tick job per minute; the dedupe key makes a restart harmless.
+                    var jobs = scope.ServiceProvider.GetRequiredService<PostgresJobStore>();
+                    await jobs.EnqueueAsync(
+                        new NewJob("schedule_tick", "{}", JobLane.Control),
+                        "schedule-tick:" + now.UtcDateTime.ToString(
+                            "yyyyMMddHHmm", System.Globalization.CultureInfo.InvariantCulture),
+                        stoppingToken);
+                    _nextScheduleTick = now.AddMinutes(1);
                 }
 
                 foreach (var lane in LaneOrder)

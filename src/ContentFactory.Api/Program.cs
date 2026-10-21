@@ -146,6 +146,7 @@ app.MapCampaignEndpoints();
 app.MapAssetEndpoints();
 app.MapReviewEndpoints();
 app.MapExportEndpoints();
+app.MapScheduleEndpoints();
 app.MapSystemEndpoints();
 
 app.Run();
