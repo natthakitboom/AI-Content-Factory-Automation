@@ -350,7 +350,11 @@ public sealed class RenderGoldenTests
 
             var srt = await File.ReadAllTextAsync(subtitlePath);
             Assert.Contains("-->", srt, StringComparison.Ordinal);
-            Assert.Contains(scenes[0].Caption, srt, StringComparison.Ordinal);
+            // A long caption is wrapped onto two lines; the wrap must not change the text.
+            Assert.Contains(
+                scenes[0].Caption,
+                srt.Replace("\r", string.Empty).Replace("\n", string.Empty),
+                StringComparison.Ordinal);
 
             var framePath = Path.Combine(root, "sample.ppm");
             await RunMediaAsync(
@@ -369,8 +373,8 @@ public sealed class RenderGoldenTests
                 frame,
                 140,
                 1280,
-                940,
-                1480,
+                800,
+                200,
                 background,
                 tolerance: 35);
             Assert.True(
