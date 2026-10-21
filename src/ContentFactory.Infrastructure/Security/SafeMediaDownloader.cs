@@ -171,7 +171,18 @@ public sealed class SafeMediaDownloader
         var bytes = address.GetAddressBytes();
         if (address.AddressFamily == AddressFamily.InterNetworkV6)
         {
-            return (bytes[0] & 0xFE) != 0xFC; // unique local fc00::/7
+            // Allow only global unicast 2000::/3. That excludes NAT64 (64:ff9b::/96),
+            // IPv4-compatible and unique-local space by construction; Teredo, 6to4
+            // (both can embed an internal IPv4) and documentation ranges are carved out.
+            if ((bytes[0] & 0xE0) != 0x20)
+            {
+                return false;
+            }
+
+            var teredo = bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0 && bytes[3] == 0;
+            var documentation = bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0x0D && bytes[3] == 0xB8;
+            var sixToFour = bytes[0] == 0x20 && bytes[1] == 0x02;
+            return !(teredo || documentation || sixToFour);
         }
 
         return bytes[0] switch

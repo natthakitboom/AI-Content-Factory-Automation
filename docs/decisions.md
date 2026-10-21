@@ -422,7 +422,7 @@ this file explains local choices and their consequences.
   `provider_requests.output_asset_id` plus hash dedupe makes a replay after a crash idempotent.
 - Decision: `SafeMediaDownloader` allows HTTPS port 443 on an explicit host allowlist
   (`fal.media`, `fal.run` and subdomains; extend by configuration after observing real hosts),
-  rejects IP literals and userinfo, validates DNS for every redirect hop (max 3), denies
+  rejects IP literals and userinfo, accepts IPv6 only in global unicast 2000::/3 minus Teredo, 6to4 and documentation ranges (security review follow-up), validates DNS for every redirect hop (max 3), denies
   private/loopback/link-local/CGNAT/multicast ranges, caps 200 MiB and 180 s, and sends no
   credentials. The production handler pins the connection to the validated address.
 - Consequences: the allowlist is a guess until a real output is seen; an unexpected host fails

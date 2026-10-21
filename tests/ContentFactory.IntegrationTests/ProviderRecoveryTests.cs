@@ -245,6 +245,25 @@ public sealed class ProviderRecoveryTests : IAsyncLifetime
         Assert.Empty(network.Requests);
     }
 
+    [Theory]
+    [InlineData("64:ff9b::a00:1", false)]
+    [InlineData("64:ff9b::7f00:1", false)]
+    [InlineData("2002:0a00:0001::1", false)]
+    [InlineData("2001:0:4136:e378:8000:63bf:3fff:fdd2", false)]
+    [InlineData("2001:db8::1", false)]
+    [InlineData("::ffff:10.0.0.1", false)]
+    [InlineData("fd00::1", false)]
+    [InlineData("fe80::1", false)]
+    [InlineData("::1", false)]
+    [InlineData("100.64.0.1", false)]
+    [InlineData("169.254.169.254", false)]
+    [InlineData("2606:4700:4700::1111", true)]
+    [InlineData("93.184.216.34", true)]
+    public void PublicAddressPolicy(string address, bool expected)
+        => Assert.Equal(
+            expected,
+            SafeMediaDownloader.IsPublicAddress(System.Net.IPAddress.Parse(address)));
+
     [Fact]
     public async Task MediaHostNeverReceivesFalCredentials()
     {
