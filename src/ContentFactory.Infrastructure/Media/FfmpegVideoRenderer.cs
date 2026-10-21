@@ -204,7 +204,9 @@ public static class FfmpegRenderCommand
                     $"d=1:s={manifest.Width}x{manifest.Height}:fps={manifest.Fps}";
             }
 
-            visualFilter += $",format=yuv420p[v{index}]";
+            // A JPEG still decodes as full-range yuvj420p; convert to limited-range yuv420p
+            // explicitly or the encoder keeps the full-range tag and QA rejects the file.
+            visualFilter += $",scale=in_range=auto:out_range=tv,format=yuv420p[v{index}]";
             filters.Add(visualFilter);
 
             var audioIndex = audioIndices[index];

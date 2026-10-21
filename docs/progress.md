@@ -1,7 +1,7 @@
 # Development progress
 
 ## Current milestone
-M1 — T06–T14 (T14 complete; T15 next)
+M1 complete through T15 (T15 done; T16 next, dashboard work blocked on Node pin)
 
 ## Task status
 | Task | Status | Commit | Evidence | Blocker |
@@ -21,8 +21,42 @@ M1 — T06–T14 (T14 complete; T15 next)
 | T12 | done | c94ff42 | `make build` → 0 warnings/0 errors; `make test-unit` → 95 passed; filtered `TechnicalQaLogicTests` → 8 passed; `make test-integration` → 86 passed; filtered `ReviewReadyTests` → 4 passed; filtered `TechnicalQaTests` → 6 skipped; `make test-media` → exit 2 blocked; no pending model changes | FFmpeg/FFprobe and a Thai-capable font are missing, so the real-media QA suite was skipped and no MP4 QA pass was claimed; compile/render/voice worker handlers remain unwired until T15 |
 | T13 | done | 4a065a3 | `make build` → 0 warnings/0 errors; `make test-unit` → 95 passed; `make test-integration` → 93 passed; filtered `FalSubmitTests` → 7 passed; `make test-media` → exit 2 blocked; `dotnet ef migrations has-pending-model-changes` → no changes | No real FAL_KEY or paid call was made; the adapter is wired against a fake fal queue server; live mode remains closed |
 | T14 | done | (this commit) | `make build` → 0 warnings/0 errors; `make test-unit` → 95 passed; `make test-integration` → 113 passed; filtered `ProviderRecoveryTests` → 20 passed; `make test-media` → exit 2 blocked; no pending model changes; `make migrate` applied `AddProviderRequestOutputAsset` | No real FAL_KEY, DNS lookup or paid call; everything ran against a fake network. Cancel verb PUT confirmed against fal docs; live behaviour of status/response/cancel remains unverified until an approved live smoke |
+| T15 | done | (this commit) | `make build` → 0 warnings/0 errors; `make test-unit` → 95 passed; `make test-integration` → 133 passed; filtered `EndToEndPipelineTests` → 5 passed; `make test-media` → 9 passed (real FFmpeg 9.0.2 with libass); `make smoke-mock` → 10/10 rounds OK; no pending model changes | Mock providers only. Real MP4 produced and probed (h264, 1080x1920, aac). Uploaded-narration and Azure voice are not wired into the worker; only one motion scene per run; dashboard banner is an API endpoint until a UI exists |
 
 ## Last verified commands
+
+### T15
+Created: `src/ContentFactory.Worker/Handlers/{PlanScript,PrepareVisuals,SynthesizeVoice,CompileTimeline,RenderVideo,PrepareReview}Handler.cs`,
+`RunPayload.cs`, `src/ContentFactory.Worker/ConfiguredMedia.cs`,
+`src/ContentFactory.Infrastructure/Providers/ProviderModes.cs`,
+`Providers/Mock/{MockVideoProvider,MockMediaHandler,MockHostResolver,MockClipGenerator,MockVoiceProvider}.cs`,
+`tests/ContentFactory.IntegrationTests/{EndToEndPipelineTests,SystemModeTests}.cs`,
+`tests/.../Infrastructure/PipelineFactAttribute.cs`, `scripts/smoke-mock.sh`,
+`media/fixtures/README.md`.
+Modified: `JobOutcome` (+ optional `NextPayloadJson`), `IVideoProvider` (+ default
+`IsBillable`), `JobDispatcher`, `SubmitVideoHandler`, `FfmpegVideoRenderer`, Worker
+`Program.cs`, `SystemEndpoints` (`GET /api/v1/system/mode`), `Makefile`, `.env.example`,
+`tests/ContentFactory.MediaTests/RenderGoldenTests.cs`.
+
+- RED: `dotnet build tests/ContentFactory.IntegrationTests` → `CS0246` for `MockMediaHandler`,
+  `MockVideoProvider` and the missing handlers.
+- First GREEN attempt failed on a real defect: a JPEG product image made the render
+  `yuvj420p`, and technical QA correctly rejected `QA_PIXEL_FORMAT_INVALID`. The renderer now
+  converts to limited-range `yuv420p` explicitly. (The earlier golden media tests used PNG.)
+- `dotnet test --filter EndToEndPipelineTests` → 5 passed (`TemplateOnlyProducesReviewableMp4`,
+  `HybridMockUsesMotionAsset`, `MockCannotOpenExternalNetwork`,
+  `PaidFlagOffBlocksLiveAdapterEvenWithKeyPresent`, `UnknownProviderNamesAreRejected`);
+  `SystemModeTests` → 2 passed.
+- `make test-media` → 9 passed. The first real FFmpeg run exposed two wrong assertions in the
+  T11 golden tests (pixel-region arguments and a wrapped SRT caption); both were test bugs and
+  were corrected. Homebrew `ffmpeg` lacks libass, so `ffmpeg-full` (keg-only) was installed
+  with Homebrew, no sudo; the Makefile adds it to `PATH` when present.
+- `make smoke-mock` → 10 rounds, each 5 passed / 0 skipped; billable requests 0, external
+  requests 0, temp entries unchanged.
+- Environment: macOS arm64, .NET SDK 10.0.402, FFmpeg 9.0.2 (ffmpeg-full), PostgreSQL 18 in
+  Docker at `127.0.0.1:54329`. Verified 2026-10-21.
+- Notes: the run payload travels through all stages; a stage passes data on through
+  `JobOutcome.NextPayloadJson` and the dispatcher forwards it in the stage outbox event.
 
 ### T14
 Created: `src/ContentFactory.Worker/Handlers/PollVideoHandler.cs`, `DownloadVideoHandler.cs`,
@@ -897,12 +931,11 @@ it was not moved or rewritten.
 - Disabled; no paid requests authorized and none made.
 
 ## Next exact task
-- Task ID: T15 — End-to-end pipeline and mock/live separation
-- Inputs/files to read: plan T15 (`## T15` after T14), the D1 stage graph, `WorkflowDefinition`,
-  all handlers registered in the Worker, and the mock/live provider separation in section F.
-- Prerequisite: T01–T14. Keep `ALLOW_PAID_APIS=false`, `AUTO_PUBLISH=false` and
-  `PUBLISHING_MODE=manual_export`; no paid request or publication is allowed.
-- Remaining blockers: FFmpeg/FFprobe and a Thai-capable font are missing (media tests blocked);
-  Node 26.11.1 vs pinned 24.22.0 and port 3000 occupancy remain. Re-queuing a poll job after an
-  owner attach is not wired yet. This is the end of M1's cloud half: stop for owner review
-  before starting T15.
+- Task ID: T16 — Owner review UI and approval bound to the exact version
+- Inputs/files to read: plan T16, `IReviewService`, `ReviewDecision`, `ValidationReport`,
+  `Approval` entity, the `awaiting_review` video version produced by T15.
+- Prerequisite: T02, T12, T15. Keep `ALLOW_PAID_APIS=false`, `AUTO_PUBLISH=false` and
+  `PUBLISHING_MODE=manual_export`.
+- Remaining blockers: Node is 26.11.1 but `.node-version` pins 24.22.0, so the Next.js dashboard
+  and Playwright specs of T16/T21 cannot be run as pinned; port 3000 was free at the last doctor
+  run. A Thai-capable font file must be supplied through `CAPTION_FONT_FILE` for worker renders.

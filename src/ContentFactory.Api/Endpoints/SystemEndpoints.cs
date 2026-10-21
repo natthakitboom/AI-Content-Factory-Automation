@@ -1,4 +1,5 @@
 using ContentFactory.Infrastructure.Jobs;
+using ContentFactory.Infrastructure.Providers;
 
 namespace ContentFactory.Api.Endpoints;
 
@@ -14,8 +15,26 @@ public static class SystemEndpoints
 
         group.MapPost("/pause", PauseAsync);
         group.MapPost("/resume", ResumeAsync);
+        group.MapGet("/mode", GetMode);
 
         return endpoints;
+    }
+
+    /// <summary>
+    /// Which providers this install runs. The banner comes from explicit provider names
+    /// only, so a stray credential in the environment can never relabel a mock run as live.
+    /// </summary>
+    private static IResult GetMode()
+    {
+        var modes = ProviderModes.FromEnvironment();
+        return Results.Ok(new
+        {
+            banner = modes.Banner,
+            mock = modes.IsMock,
+            text = modes.Text,
+            video = modes.Video,
+            voice = modes.Voice
+        });
     }
 
     private static async Task<IResult> PauseAsync(

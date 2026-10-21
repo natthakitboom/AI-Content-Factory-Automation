@@ -17,7 +17,7 @@ test evidence.
 - M0 (T00–T05) is complete and was reviewed by the owner.
 - Milestone M1: T06–T12 (durable jobs, worker orchestration, local script planning,
   budget/approval controls, narration, timeline/render, technical QA and review).
-- T00–T14 are complete. T15 is next.
+- T00–T15 are complete. T16 is next (dashboard work needs the pinned Node 24.22.0).
 - Do not start M2+ work until the owner reviews M1.
 
 ## Safety rails

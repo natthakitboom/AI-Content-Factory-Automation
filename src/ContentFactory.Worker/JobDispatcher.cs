@@ -195,7 +195,7 @@ public sealed class JobDispatcher
                             mode = WorkflowDefinition.ToDbMode(mode),
                             nextJobType,
                             notRequiredStages = WorkflowDefinition.NotRequiredStagesFor(mode),
-                            jobPayload = job.PayloadJson
+                            jobPayload = outcome.NextPayloadJson ?? job.PayloadJson
                         },
                         JsonDefaults.Options));
 

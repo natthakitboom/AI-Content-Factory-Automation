@@ -428,3 +428,27 @@ this file explains local choices and their consequences.
 - Consequences: the allowlist is a guess until a real output is seen; an unexpected host fails
   closed. Live status/response JSON shapes were taken from the plan and docs, not exercised.
 
+## ADR-0018: Offline pipeline wiring and mock/live separation (T15)
+
+- Decision: provider choice comes only from explicit `TEXT_PROVIDER`, `VIDEO_PROVIDER` and
+  `VOICE_PROVIDER` values (`ProviderModes`). A credential in the environment never selects
+  live; unknown names fail. Mock mode is reported as `MOCK MODE` by `GET /api/v1/system/mode`.
+  `SubmitVideoHandler` additionally blocks a billable provider with `PAID_APIS_DISABLED`
+  before any quote, reservation or HTTP request when `ALLOW_PAID_APIS=false`.
+- Decision: the mock cloud path uses the real code: `MockVideoProvider` (never billable) feeds
+  the real poll and download handlers through `SafeMediaDownloader`, whose HTTP handler only
+  serves a locally generated clip and counts every refused external request.
+- Decision: shared contract changes are additive. `JobOutcome` gained optional
+  `NextPayloadJson` (existing callers unchanged) so a stage can hand data to the next stage;
+  `IVideoProvider.IsBillable` defaults to true so every live adapter stays billable. The run
+  payload is never rewritten, only extended.
+- Decision: render services that need the caption font are built on first use from
+  `CAPTION_FONT_FILE`; without it the render stages return `CAPTION_FONT_NOT_CONFIGURED`
+  instead of crashing the worker or inventing a fingerprint.
+- Decision: the renderer converts stills to limited-range yuv420p explicitly (a JPEG otherwise
+  yields yuvj420p and fails technical QA).
+- Consequences / known gaps: uploaded narration and Azure voice are not wired to the worker
+  (`VOICE_UPLOAD_NOT_WIRED` / `VOICE_PROVIDER_NOT_CONFIGURED`), a hybrid run carries exactly
+  one motion scene, and prepare_review only confirms the version is awaiting review. Approval
+  stays an owner action (T16).
+

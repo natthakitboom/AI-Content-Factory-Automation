@@ -30,6 +30,7 @@ public sealed class SubmitVideoHandler : IJobHandler
     private readonly PriceSnapshotService _priceService;
     private readonly FalOptions _falOptions;
     private readonly TimeProvider _clock;
+    private readonly BudgetOptions? _budgetOptions;
 
     public SubmitVideoHandler(
         AppDbContext db,
@@ -37,8 +38,10 @@ public sealed class SubmitVideoHandler : IJobHandler
         IBudgetGuard budgetGuard,
         PriceSnapshotService priceService,
         FalOptions falOptions,
-        TimeProvider clock)
+        TimeProvider clock,
+        BudgetOptions? budgetOptions = null)
     {
+        _budgetOptions = budgetOptions;
         _db = db ?? throw new ArgumentNullException(nameof(db));
         _videoProvider = videoProvider ?? throw new ArgumentNullException(nameof(videoProvider));
         _budgetGuard = budgetGuard ?? throw new ArgumentNullException(nameof(budgetGuard));
@@ -98,18 +101,35 @@ public sealed class SubmitVideoHandler : IJobHandler
             return Blocked("CLOUD_USE_NOT_ALLOWED");
         }
 
-        var quote = await _priceService.GetQuoteAsync(
-            _videoProvider.Name,
-            _falOptions.ModelId,
-            payload.ConfigHash,
-            ct);
+        // The paid flag wins before any quote, reservation or HTTP request exists.
+        if (_videoProvider.IsBillable && _budgetOptions is { AllowPaidApis: false })
+        {
+            return Blocked("PAID_APIS_DISABLED");
+        }
 
-        var reservation = await _budgetGuard.ReserveAsync(
-            payload.Request.OperationId,
-            payload.CampaignId,
-            payload.VideoScopeId,
-            quote,
-            ct);
+        BudgetReservation? reservation = null;
+        if (_videoProvider.IsBillable)
+        {
+            try
+            {
+                var quote = await _priceService.GetQuoteAsync(
+                    _videoProvider.Name,
+                    _falOptions.ModelId,
+                    payload.ConfigHash,
+                    ct);
+
+                reservation = await _budgetGuard.ReserveAsync(
+                    payload.Request.OperationId,
+                    payload.CampaignId,
+                    payload.VideoScopeId,
+                    quote,
+                    ct);
+            }
+            catch (PaidApisDisabledException)
+            {
+                return Blocked("PAID_APIS_DISABLED");
+            }
+        }
 
         var requestHash = HashPayload(payload.Request);
         var providerRequest = new ProviderRequest
@@ -117,7 +137,7 @@ public sealed class SubmitVideoHandler : IJobHandler
             Id = Guid.NewGuid(),
             JobId = job.Id,
             Provider = _videoProvider.Name,
-            Model = _falOptions.ModelId,
+            Model = _videoProvider.IsBillable ? _falOptions.ModelId : _videoProvider.Name,
             ClientOperationId = payload.Request.OperationId,
             RequestHash = requestHash,
             Status = "prepared",
@@ -148,10 +168,14 @@ public sealed class SubmitVideoHandler : IJobHandler
         {
             providerRequest.Status = "failed_confirmed";
             await _db.SaveChangesAsync(ct);
-            await _budgetGuard.ReleaseAsync(
-                reservation.Id,
-                $"Provider rejected: {exception.Code}",
-                ct);
+            if (reservation is not null)
+            {
+                await _budgetGuard.ReleaseAsync(
+                    reservation.Id,
+                    $"Provider rejected: {exception.Code}",
+                    ct);
+            }
+
             return new JobOutcome(
                 "failed",
                 null,

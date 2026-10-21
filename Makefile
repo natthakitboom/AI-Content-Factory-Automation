@@ -8,6 +8,12 @@ ifeq ($(wildcard $(DOTNET)),)
 DOTNET := dotnet
 endif
 
+# Homebrew's plain `ffmpeg` has no libass; `ffmpeg-full` is keg-only, so expose it here
+# without editing the user's shell profile. Absent on other machines, it is a no-op.
+ifneq (,$(wildcard /opt/homebrew/opt/ffmpeg-full/bin/ffmpeg))
+export PATH := /opt/homebrew/opt/ffmpeg-full/bin:$(PATH)
+endif
+
 ifneq (,$(wildcard ./.env))
 include .env
 export
@@ -18,7 +24,7 @@ endif
 -include .env.test.local
 export
 
-.PHONY: help doctor build infra-up infra-down migrate owner-init test-unit test-integration test-media verify env-check clean
+.PHONY: help doctor build infra-up infra-down migrate owner-init test-unit test-integration test-media smoke-mock verify env-check clean
 
 help:
 	@echo "Content Factory — M0 commands"
@@ -27,6 +33,7 @@ help:
 	@echo "  make test-unit         Run unit tests (no DB, no network AI)"
 	@echo "  make test-integration  Run PostgreSQL integration tests (test DB only)"
 	@echo "  make test-media        Run native media tests (requires FFmpeg)"
+	@echo "  make smoke-mock        Run the offline end-to-end pipeline 10 times (mock providers only)"
 	@echo "  make verify            Build + unit tests + integration tests when configured"
 	@echo "  make env-check         Verify local .env exists and is not tracked"
 
@@ -67,6 +74,9 @@ test-media:
 		exit 2; \
 	fi
 	$(DOTNET) test tests/ContentFactory.MediaTests --nologo
+
+smoke-mock:
+	@./scripts/smoke-mock.sh $(ROUNDS)
 
 verify: build test-unit
 
