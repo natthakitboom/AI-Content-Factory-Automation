@@ -34,13 +34,13 @@ public sealed class ReleaseReadinessTests
     [Fact]
     public void BuildNeverRequiresPaidKeys()
     {
-        var pipeline = Read("azure-pipelines.yml");
+        var pipeline = Read(".github/workflows/verify.yml");
         var verify = Read("scripts/verify-all.sh");
 
         foreach (var text in new[] { pipeline, verify })
         {
-            Assert.DoesNotMatch(@"\$\((FAL_KEY|AZURE_SPEECH_KEY|LM_STUDIO_API_TOKEN)\)", text);
-            Assert.DoesNotMatch(@"(?m)^\s*-?\s*(FAL_KEY|AZURE_SPEECH_KEY)\s*:\s*\S+", text);
+            Assert.DoesNotMatch(@"\$\((FAL_KEY|LM_STUDIO_API_TOKEN)\)", text);
+            Assert.DoesNotMatch(@"(?m)^\s*-?\s*(FAL_KEY)\s*:\s*\S+", text);
         }
 
         // Verification pins every provider to mock and keeps paid work off.
@@ -119,12 +119,28 @@ public sealed class ReleaseReadinessTests
     [Fact]
     public void PipelineIsExplicitAboutWhatItDoesNotProve()
     {
-        var pipeline = Read("azure-pipelines.yml");
+        var pipeline = Read(".github/workflows/verify.yml");
 
         Assert.Contains("libx264", pipeline, StringComparison.Ordinal);
         Assert.Contains("VideoToolbox", pipeline, StringComparison.Ordinal);
         Assert.DoesNotContain("deploy", pipeline, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("git push", pipeline, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void NoAzureServiceIsConfiguredOrWired()
+    {
+        foreach (var file in new[]
+                 {
+                     ".env.example", ".github/workflows/verify.yml", "scripts/verify-all.sh",
+                     "src/ContentFactory.Worker/Program.cs", "src/ContentFactory.Api/Program.cs",
+                     "src/ContentFactory.Infrastructure/Providers/ProviderModes.cs"
+                 })
+        {
+            Assert.DoesNotContain("azure", Read(file), StringComparison.OrdinalIgnoreCase);
+        }
+
+        Assert.False(File.Exists(Path.Combine(Root(), "azure-pipelines.yml")));
     }
 
     [Fact]

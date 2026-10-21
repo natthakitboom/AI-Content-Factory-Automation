@@ -234,6 +234,10 @@ public sealed class EndToEndPipelineTests : IAsyncLifetime
         var error = Assert.Throws<ValidationException>(() =>
             ProviderModes.Resolve(name => name == "VIDEO_PROVIDER" ? "falcon" : null));
         Assert.Equal("PROVIDER_MODE_INVALID", error.Code);
+        Assert.Equal(
+            "PROVIDER_MODE_INVALID",
+            Assert.Throws<ValidationException>(() =>
+                ProviderModes.Resolve(name => name == "VOICE_PROVIDER" ? "azure" : null)).Code);
     }
 
     private sealed class CountingHandler : HttpMessageHandler

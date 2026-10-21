@@ -111,7 +111,7 @@ settings; if you want the worker to survive sleep, that is a choice for you to m
 
 ## Known limitations
 
-- Uploaded narration and Azure speech are not connected to the worker; only the mock tone is.
+- Uploaded narration is not connected to the worker; only the mock tone is. This project does not use any Azure service.
 - Hybrid runs carry one motion scene and have never run against the real cloud provider.
 - The dashboard has no screens for creating products, campaigns or schedules; use `scripts/mock-flow.sh`
   or the API.

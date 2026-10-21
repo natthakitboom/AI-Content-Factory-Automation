@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 
 export ALLOW_PAID_APIS=false AUTO_PUBLISH=false PUBLISHING_MODE=manual_export
 export TEXT_PROVIDER=mock VIDEO_PROVIDER=mock VOICE_PROVIDER=mock ENABLE_SCHEDULES=false
-export FAL_KEY= AZURE_SPEECH_KEY= LM_STUDIO_API_TOKEN= LIVE_APPROVAL_FILE=
+export FAL_KEY= LM_STUDIO_API_TOKEN= LIVE_APPROVAL_FILE=
 
 export PATH="$HOME/.dotnet:$PATH"
 [ -x "$HOME/.node/v$(cat .node-version)/bin/node" ] && export PATH="$HOME/.node/v$(cat .node-version)/bin:$PATH"

@@ -33,7 +33,6 @@ public sealed class DiagnosticsService
             configured = new
             {
                 falKey = Present("FAL_KEY"),
-                azureSpeechKey = Present("AZURE_SPEECH_KEY"),
                 lmStudioToken = Present("LM_STUDIO_API_TOKEN"),
                 captionFontFile = Present("CAPTION_FONT_FILE")
             }

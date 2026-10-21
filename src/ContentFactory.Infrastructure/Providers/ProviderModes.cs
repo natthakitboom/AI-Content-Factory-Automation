@@ -15,7 +15,7 @@ public sealed record ProviderModes(string Text, string Video, string Voice)
 
     private static readonly string[] TextNames = ["mock", "lm_studio"];
     private static readonly string[] VideoNames = ["mock", "fal"];
-    private static readonly string[] VoiceNames = ["uploaded", "mock", "azure"];
+    private static readonly string[] VoiceNames = ["uploaded", "mock"];
 
     public bool IsMock => Text == "mock" || Video == "mock" || Voice == "mock";
 

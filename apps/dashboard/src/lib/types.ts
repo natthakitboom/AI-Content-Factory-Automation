@@ -173,7 +173,7 @@ export interface Diagnostics {
   };
   disk: { freeBytes: number | null; totalBytes: number | null };
   thermal: { status: string; detail: string };
-  configured: { falKey: boolean; azureSpeechKey: boolean; lmStudioToken: boolean; captionFontFile: boolean };
+  configured: { falKey: boolean; lmStudioToken: boolean; captionFontFile: boolean };
 }
 
 export interface MetricsOverview {

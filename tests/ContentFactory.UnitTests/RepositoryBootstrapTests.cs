@@ -52,7 +52,6 @@ public sealed class RepositoryBootstrapTests
         {
             "DATABASE_PASSWORD",
             "FAL_KEY",
-            "AZURE_SPEECH_KEY",
             "LM_STUDIO_API_TOKEN",
             "LIVE_APPROVAL_FILE"
         };

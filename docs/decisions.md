@@ -541,3 +541,16 @@ this file explains local choices and their consequences.
 - Decision: the release is labelled mock/local-only. Added `GET/POST /api/v1/channels` because the owner
   could not otherwise create a channel through the product (found while writing `scripts/mock-flow.sh`).
 
+## ADR-0025: No Azure services (owner decision)
+
+- Decision: this project uses no Azure service. `AZURE_*` settings, the `azure` voice option, the Azure
+  key redaction and diagnostics entry, and `azure-pipelines.yml` were removed; CI is now
+  `.github/workflows/verify.yml` (verification only, never run, no remote connected). `VOICE_PROVIDER`
+  accepts only `uploaded` or `mock`, and `ReleaseReadinessTests.NoAzureServiceIsConfiguredOrWired`
+  keeps it that way.
+- Consequence: the T10 `AzureSpeechVoiceProvider` adapter and its tests remain in the tree as unused,
+  never-wired code (ADR-0013 describes it). Deleting them is a separate, larger change awaiting the
+  owner's go-ahead.
+- Also fixed in this change: an empty `AZURE_SPEECH_VOICE_ID=` in `.env` was used as a voice id and
+  blocked narration with `VOICE_VOICE_ID_INVALID`. The worker now derives the mock voice id itself.
+

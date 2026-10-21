@@ -27,7 +27,7 @@ scan() { # rule-name regex
 }
 
 scan "private key block" '-----BEGIN [A-Z ]*PRIVATE KEY-----'
-scan "named secret with a value" '(FAL_KEY|AZURE_SPEECH_KEY|LM_STUDIO_API_TOKEN|DATABASE_PASSWORD)[[:space:]]*[=:][[:space:]]*["'"'"']?[A-Za-z0-9_./+-]{12,}([^=A-Za-z0-9_./+-]|$)'
+scan "named secret with a value" '(FAL_KEY|LM_STUDIO_API_TOKEN|DATABASE_PASSWORD)[[:space:]]*[=:][[:space:]]*["'"'"']?[A-Za-z0-9_./+-]{12,}([^=A-Za-z0-9_./+-]|$)'
 scan "API key shape (sk-)" 'sk-[A-Za-z0-9]{20,}'
 scan "AWS access key shape" 'AKIA[0-9A-Z]{16}'
 scan "GitHub token shape" 'gh[pousr]_[A-Za-z0-9]{30,}'

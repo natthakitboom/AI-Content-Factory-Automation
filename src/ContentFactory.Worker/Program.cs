@@ -101,7 +101,7 @@ builder.Services.AddScoped<ITimelineCompiler, ConfiguredTimelineCompiler>();
 builder.Services.AddScoped<IVideoRenderer, ConfiguredVideoRenderer>();
 builder.Services.AddSingleton(new VoiceHandlerOptions(
     modes.Voice,
-    Environment.GetEnvironmentVariable("AZURE_SPEECH_VOICE_ID") ?? modes.Voice,
+    modes.Voice + "-voice-1",
     modes.Voice + "-v1",
     modes.Voice + "-config-v1"));
 

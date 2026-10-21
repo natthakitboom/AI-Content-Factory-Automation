@@ -62,7 +62,7 @@ export default function SettingsPage() {
               <tr><th scope="row">Disk free</th><td>{formatBytes(d.disk.freeBytes)} of {formatBytes(d.disk.totalBytes)}</td></tr>
               <tr><th scope="row">Worker heartbeat</th><td>{status.data ? (status.data.workerHeartbeat.lastSeenAt ? `${formatTime(status.data.workerHeartbeat.lastSeenAt)}${status.data.workerHeartbeat.stale ? " (stale)" : ""}` : "none — worker not running") : "…"}</td></tr>
               <tr><th scope="row">Temperature</th><td>{d.thermal.status} — {d.thermal.detail}</td></tr>
-              <tr><th scope="row">Configured</th><td>fal key: {yesNo(d.configured.falKey)} · Azure speech: {yesNo(d.configured.azureSpeechKey)} · LM Studio token: {yesNo(d.configured.lmStudioToken)} · caption font: {yesNo(d.configured.captionFontFile)}</td></tr>
+              <tr><th scope="row">Configured</th><td>fal key: {yesNo(d.configured.falKey)} · LM Studio token: {yesNo(d.configured.lmStudioToken)} · caption font: {yesNo(d.configured.captionFontFile)}</td></tr>
             </tbody>
           </table>
         )}

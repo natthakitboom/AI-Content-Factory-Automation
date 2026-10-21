@@ -74,7 +74,6 @@ builder.Services.AddSingleton<IPasswordHasher<OwnerUser>, PasswordHasher<OwnerUs
 builder.Services.AddSingleton(new SecretRedactor(
 [
     builder.Configuration["FAL_KEY"],
-    builder.Configuration["AZURE_SPEECH_KEY"],
     builder.Configuration["LM_STUDIO_API_TOKEN"],
     builder.Configuration["DATABASE_PASSWORD"],
     builder.Configuration.GetConnectionString("App")

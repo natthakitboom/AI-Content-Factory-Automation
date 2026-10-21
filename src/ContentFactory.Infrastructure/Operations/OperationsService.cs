@@ -83,6 +83,7 @@ public sealed class OperationsService
         ["HYBRID_NO_MOTION_SCENE"] = "A hybrid run needs one scene with a motion prompt and a cloud scene allowance.",
         ["VOICE_UPLOAD_NOT_WIRED"] = "Automatic narration was not requested for this run, and uploaded narration is not connected to the worker yet.",
         ["VOICE_PROVIDER_NOT_CONFIGURED"] = "The selected narration provider is not wired for automatic generation.",
+        ["VOICE_VOICE_ID_INVALID"] = "The narration voice id is empty or invalid. Check VOICE_PROVIDER in .env.",
         ["PROVIDER_DELAYED"] = "The provider is taking longer than 30 minutes. The original request is still being polled; nothing was resubmitted."
     };
 
